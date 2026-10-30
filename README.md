@@ -73,14 +73,16 @@ Open `project.godot` in Godot 4.7+ (Forward+) and press **F5**.
 - Enemies flash red on hit, and explode on death into rigid-body flesh chunks,
   blood particle sprays, directional blood mist and procedural blood decals.
 - Hitmarkers: small diagonal ticks drawn at the **exact screen position of the
-  projectile impact**, not the centre of the screen. White on a normal hit,
-  larger red ticks + lower sound on a kill. See `screenshots/hitmarker.png`.
+  projectile impact**, not the centre of the screen. Normal hits use
+  `assets/sounds/hitmarker-sound-effect.wav`; kill ticks are red and silent so
+  the spatial blood-impact sound takes priority. See `screenshots/hitmarker.png`.
 
 ### Audio
 - Rifle fire uses `assets/sounds/semiautorifleshot.wav` through a 3-voice pool
   with slight random pitch and volume variation per shot.
 - Enemy deaths play the spatial `assets/sounds/blood_impact_.wav` at the death
-  position with a slight random pitch shift.
+  position with a slight random pitch shift. There is no hitmarker kill sound
+  underneath it.
 
 ## File map
 

@@ -1,16 +1,16 @@
 class_name Hitmarker
 extends Control
 ## Four small diagonal ticks at the exact screen position of the impact.
-## Normal hit = white + short tick sound; kill = slightly bigger, red, lower
-## "thunk". The sounds are synthesized at startup (no audio files needed).
+## Normal hit = white ticks + the hitmarker WAV; kill = larger red ticks but no
+## hitmarker audio, so the spatial blood-impact sound stays clear.
+
+const HIT_SOUND := preload("res://assets/sounds/hitmarker-sound-effect.wav")
 
 var _t := 0.0
 var _duration := 0.18
 var _kill := false
 var _screen_pos := Vector2.ZERO
 var _player: AudioStreamPlayer
-var _snd_hit: AudioStreamWAV
-var _snd_kill: AudioStreamWAV
 
 
 func _ready() -> void:
@@ -18,9 +18,9 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_update_full_rect()
 
-	_snd_hit = _make_blip(1900.0, 0.05, 0.30, 0.0)
-	_snd_kill = _make_blip(620.0, 0.22, 0.45, 0.5)
 	_player = AudioStreamPlayer.new()
+	_player.stream = HIT_SOUND
+	_player.volume_db = -4.0
 	add_child(_player)
 
 
@@ -37,8 +37,12 @@ func flash(kill: bool, screen_pos: Vector2) -> void:
 	_screen_pos = screen_pos
 	_duration = 0.34 if kill else 0.18
 	_t = 1.0
-	_player.stream = _snd_kill if kill else _snd_hit
-	_player.play()
+	if kill:
+		# The enemy's blood-impact sound owns the kill audio.
+		_player.stop()
+	else:
+		_player.pitch_scale = randf_range(0.97, 1.03)
+		_player.play()
 	queue_redraw()
 
 
@@ -61,23 +65,3 @@ func _draw() -> void:
 	for d in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
 		var dir: Vector2 = d.normalized()
 		draw_line(c + dir * inner, c + dir * (inner + length), col, width, true)
-
-
-## Short decaying sine blip (optionally with a fifth-ish overtone) as 16-bit mono PCM.
-func _make_blip(freq: float, length: float, volume: float, overtone: float) -> AudioStreamWAV:
-	var rate := 44100
-	var n := int(rate * length)
-	var data := PackedByteArray()
-	data.resize(n * 2)
-	for i in n:
-		var t := float(i) / rate
-		var env := exp(-t * 6.0 / length)
-		var s := sin(TAU * freq * t) + overtone * sin(TAU * freq * 1.5 * t)
-		var v := clampf(s * env * volume, -1.0, 1.0)
-		data.encode_s16(i * 2, int(v * 32767.0))
-	var w := AudioStreamWAV.new()
-	w.format = AudioStreamWAV.FORMAT_16_BITS
-	w.mix_rate = rate
-	w.stereo = false
-	w.data = data
-	return w
