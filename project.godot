@@ -15,13 +15,20 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Titan Movement FPS"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [autoload]
 
 Gore="*res://scripts/gore.gd"
+ReplayManager="*res://scripts/replay_manager.gd"
 McpInteractionServer="*res://autoload/mcp_interaction_server.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/mode=3
 
 [navigation]
 

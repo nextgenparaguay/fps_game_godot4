@@ -1,12 +1,49 @@
 # Titan Movement FPS (Godot 4)
 
 A greybox, mechanics-first Titanfall-inspired FPS. Everything is procedural
-(primitive meshes, generated blood splats, synthesized hitmarker blips) so the
-movement, gunplay, AI and gore loops can be tuned before the art pass.
+(primitive meshes, generated blood splats) so the movement, gunplay, AI and gore
+loops can be tuned before the art pass.
 
-Open `project.godot` in Godot 4.7+ (Forward+) and press **F5**.
+Open `project.godot` in Godot 4.7+ (Forward+) and press **F5**. The main menu is
+the startup scene.
 
 ![Gameplay overview](screenshots/overview.png)
+
+## Main menu and match loop
+
+![Main menu](screenshots/main_menu.png)
+
+- Main menu (`scenes/main_menu.tscn`): **Play**, **Replays**, **Options**, and
+  **Exit**, wired to real scene transitions / quit. Options stores mouse
+  sensitivity and master volume in `user://settings.cfg`.
+- Matches use a kill-target spawner: after 6 eliminations the spawner stops,
+  and clearing every remaining enemy triggers **Victory**. Player death triggers
+  **Defeat**. Both stop the spawner and emit arena signals.
+- The post-match CanvasLayer offers **Replay Match**, **Save Replay**, and
+  **Exit to Main Menu**. Saved replays are written as JSON under
+  `user://replays/`; the Replays menu lists and opens them.
+- The arena records player/enemy `global_transform` plus yaw, pitch, health and
+  alive state at a fixed 20 Hz into ReplayManager during `_physics_process()`.
+
+![Match result](screenshots/match_result.png)
+
+## Replay viewer
+
+Open the viewer from the post-match **Replay Match** button or from **Replays**
+on the main menu. Playback interpolates the recorded transforms.
+
+![Third-person replay](screenshots/replay_third.png)
+
+| Key | Camera / Action |
+|---|---|
+| **1** | First-person — camera attached to the recorded player head |
+| **2** | Third-person — SpringArm3D following the player |
+| **3** | Drone — smooth lerped follow camera |
+| **4** | Free camera — WASD, Q/E, arrow keys, Shift for speed |
+| **5** | Static area cameras — cycles fixed cameras that `look_at()` the player |
+| **Space** | Pause / resume |
+| **R** | Restart replay |
+| **Esc** | Exit to main menu |
 
 ## Controls
 
@@ -39,7 +76,7 @@ Open `project.godot` in Godot 4.7+ (Forward+) and press **F5**.
 - The projectile is aimed at the point under the projected reticle (plus the
   current spread sample). Damage is applied on physical impact, not instantly
   on the trigger pull.
-- ADS zooms the camera (~1.9x), tightens spread, slows movement and aligns the
+- ADS zooms the camera (~3.5x), tightens spread, slows movement and aligns the
   iron sights on the aim point.
 
 ### Dynamic reticle / recoil
@@ -92,12 +129,18 @@ Open `project.godot` in Godot 4.7+ (Forward+) and press **F5**.
 | `scripts/weapon.gd` | Rifle model, fire control, bloom, procedural aim/IK |
 | `scripts/projectile.gd` | Travelling bullet with swept collision and impact FX |
 | `scripts/reticle.gd` | Dynamic spread ring + UI recoil |
-| `scripts/hitmarker.gd` | Hit/kill marker and synthesized sounds |
+| `scripts/hitmarker.gd` | Impact-position hitmarker + hit sound |
+| `scripts/replay_manager.gd` | Autoload: recording, JSON save/load, replay list |
+| `scripts/replay_viewer.gd` | Recorded ghost playback + five camera modes |
+| `scripts/main_menu.gd` | Main menu scene transitions |
+| `scripts/options.gd` | Sensitivity / volume settings |
+| `scripts/replay_browser.gd` | Saved replay list and launcher |
 | `scripts/enemy.gd` | NavAgent rusher, avoidance/separation, death |
 | `scripts/gore.gd` | Autoload gore manager (gibs, spray, decals) |
 | `scripts/gib.gd` | Rigid-body flesh chunk with blood trail |
-| `scripts/arena.gd` | Greybox level, navmesh bake, enemy spawns |
-| `scenes/main.tscn` | Minimal scene root (arena script builds the level) |
+| `scripts/arena.gd` | Level, navmesh, spawner, match flow and recording |
+| `scenes/main_menu.tscn` | Main menu UI |
+| `scenes/main.tscn` | Gameplay scene root (arena script builds the level) |
 
 ## Tuning notes
 

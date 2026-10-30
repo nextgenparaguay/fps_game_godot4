@@ -17,7 +17,7 @@ const ReticleScript := preload("res://scripts/reticle.gd")
 
 @export_group("Look")
 @export var mouse_sensitivity := 0.0022
-@export var base_fov := 70.0
+@export var base_fov := 65.0
 @export var ads_zoom := 3.5              ## FOV zoom factor while aiming down sights
 @export var ads_move_mult := 0.6         ## movement speed multiplier while aiming
 
@@ -120,6 +120,10 @@ func _ready() -> void:
 	collision_mask = 1 | 4       # collides with world (1) and enemies (3)
 	floor_snap_length = 0.4
 	floor_max_angle = deg_to_rad(50.0)
+
+	var cfg := ConfigFile.new()
+	if cfg.load("user://settings.cfg") == OK:
+		mouse_sensitivity *= float(cfg.get_value("input", "sensitivity_multiplier", 1.0))
 
 	health = max_health
 	wall_jumps_left = air_wall_jumps
@@ -698,11 +702,6 @@ func take_damage(amount: float, _hit_pos := Vector3.ZERO, _hit_normal := Vector3
 	if health <= 0.0:
 		_dead = true
 		died.emit()
-		get_tree().create_timer(1.5).timeout.connect(_restart)
-
-
-func _restart() -> void:
-	get_tree().reload_current_scene()
 
 
 func _on_gore_exploded(pos: Vector3, intensity: float) -> void:

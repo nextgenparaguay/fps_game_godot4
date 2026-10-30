@@ -1,0 +1,104 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/main_menu.gd" id="1_menu"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_menu")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.027, 0.035, 0.05, 1)
+
+[node name="TopAccent" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 4.0
+grow_horizontal = 2
+color = Color(0.92, 0.45, 0.12, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Center"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Center/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.86, 0.68, 1)
+theme_override_font_sizes/font_size = 54
+text = "TITAN MOVEMENT"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.67, 0.74, 1)
+theme_override_font_sizes/font_size = 16
+text = "MECHANICS-FIRST FPS SANDBOX"
+horizontal_alignment = 1
+
+[node name="Space" type="Control" parent="Center/VBox"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+
+[node name="Play" type="Button" parent="Center/VBox"]
+custom_minimum_size = Vector2(420, 56)
+layout_mode = 2
+focus_neighbor_bottom = NodePath("../Replays")
+theme_override_font_sizes/font_size = 22
+text = "Play"
+
+[node name="Replays" type="Button" parent="Center/VBox"]
+custom_minimum_size = Vector2(420, 56)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Replays"
+
+[node name="Options" type="Button" parent="Center/VBox"]
+custom_minimum_size = Vector2(420, 56)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Options"
+
+[node name="Exit" type="Button" parent="Center/VBox"]
+custom_minimum_size = Vector2(420, 56)
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Exit"
+
+[node name="Hint" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -46.0
+offset_bottom = -18.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.45, 0.5, 0.57, 1)
+theme_override_font_sizes/font_size = 14
+text = "WASD move   •   Shift sprint   •   C crouch/slide   •   Space jump   •   RMB aim"
+
+[connection signal="pressed" from="Center/VBox/Play" to="." method="_on_play_pressed"]
+[connection signal="pressed" from="Center/VBox/Replays" to="." method="_on_replays_pressed"]
+[connection signal="pressed" from="Center/VBox/Options" to="." method="_on_options_pressed"]
+[connection signal="pressed" from="Center/VBox/Exit" to="." method="_on_exit_pressed"]
