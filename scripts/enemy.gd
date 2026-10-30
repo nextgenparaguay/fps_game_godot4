@@ -10,6 +10,8 @@ extends CharacterBody3D
 
 signal died
 
+const BLOOD_SOUND := preload("res://assets/sounds/blood_impact_.wav")
+
 @export var max_health := 100.0
 @export var move_speed := 4.5
 @export var attack_damage := 12.0
@@ -214,6 +216,25 @@ func _explode() -> void:
 	_dead = true
 	var overkill := -health
 	var intensity := clampf(1.0 + overkill / max_health, 1.0, 2.5)
+	_play_death_sound()
 	Gore.explode(global_position + Vector3.UP * 1.0, intensity, _last_shot_dir)
 	died.emit()
 	queue_free()
+
+
+## Spatial death squelch. A small random pitch shift keeps repeated kills from
+## sounding identical.
+func _play_death_sound() -> void:
+	var root := get_tree().current_scene
+	if root == null:
+		return
+	var p := AudioStreamPlayer3D.new()
+	p.stream = BLOOD_SOUND
+	p.pitch_scale = randf_range(0.92, 1.08)
+	p.volume_db = randf_range(-4.0, -2.0)
+	p.unit_size = 7.0
+	p.max_distance = 70.0
+	root.add_child(p)
+	p.global_position = global_position + Vector3.UP * 1.0
+	p.finished.connect(p.queue_free)
+	p.play()

@@ -17,8 +17,8 @@ const ReticleScript := preload("res://scripts/reticle.gd")
 
 @export_group("Look")
 @export var mouse_sensitivity := 0.0022
-@export var base_fov := 90.0
-@export var ads_zoom := 1.9              ## FOV zoom factor while aiming down sights
+@export var base_fov := 70.0
+@export var ads_zoom := 3.5              ## FOV zoom factor while aiming down sights
 @export var ads_move_mult := 0.6         ## movement speed multiplier while aiming
 
 @export_group("Ground")
@@ -275,6 +275,11 @@ func _physics_process(delta: float) -> void:
 
 	# Godot's forward is -Z, get_vector's "up" is negative Y => forward = input.y < 0
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	# Sprint is only a movement mode: releasing the movement keys ends it in the
+	# same physics tick instead of letting the sprint pose linger while sliding
+	# to a stop.
+	if _sprint_toggle and input.length() < 0.1:
+		_sprint_toggle = false
 	var wish_dir := (global_transform.basis * Vector3(input.x, 0.0, input.y)).normalized()
 
 	match state:
@@ -641,7 +646,8 @@ func _update_hud() -> void:
 
 func is_sprinting() -> bool:
 	return _sprint_toggle and state == State.GROUND and not crouching \
-			and _horizontal_speed() > 1.2
+			and _horizontal_speed() > 1.2 \
+			and Input.get_vector("move_left", "move_right", "move_forward", "move_back").length() > 0.1
 
 
 func is_dead() -> bool:

@@ -18,6 +18,7 @@ extends Node3D
 const MAX_RANGE := 400.0
 const HIT_MASK := 1 | 4              # world + enemies
 const ProjectileScript := preload("res://scripts/projectile.gd")
+const SHOT_SOUND := preload("res://assets/sounds/semiautorifleshot.wav")
 
 const HIP_POS := Vector3(0.22, -0.24, -0.56)
 const ADS_POS := Vector3(0.0, -0.069, -0.68)
@@ -34,17 +35,17 @@ const FIRE_OVERRIDE_SPEED := 20.0
 @export var hip_spread_deg := 0.45
 @export var ads_spread_deg := 0.05
 @export var bloom_per_shot_deg := 0.86
-@export var max_bloom_deg := 4.8
+@export var max_bloom_deg := 2.8
 @export var bloom_recovery_deg := 5.0
 @export var movement_spread_deg := 1.35
 @export var air_spread_deg := 2.2
 @export var sprint_spread_deg := 2.1
 
 @export_group("Recoil")
-@export var hip_reticle_kick_px := 26.0
-@export var hip_reticle_jitter_px := 8.6
-@export var ads_camera_pitch := 0.0105
-@export var ads_camera_yaw := 0.0020
+@export var hip_reticle_kick_px := 32.0
+@export var hip_reticle_jitter_px := 12.6
+@export var ads_camera_pitch := 0.0205
+@export var ads_camera_yaw := 0.0040
 
 var player: Player
 var camera: Camera3D
@@ -78,6 +79,8 @@ var _fore_l: MeshInstance3D
 var _hand_l: MeshInstance3D
 var _skin_mat: StandardMaterial3D
 var _sleeve_mat: StandardMaterial3D
+var _shot_players: Array[AudioStreamPlayer] = []
+var _shot_voice := 0
 
 
 func current_name() -> String:
@@ -87,6 +90,28 @@ func current_name() -> String:
 func _ready() -> void:
 	_build_weapon()
 	_build_arms()
+	_build_audio()
+
+
+## A tiny voice pool lets rapid automatic fire overlap without cutting the
+## previous shot off. Each shot gets a slight random pitch shift.
+func _build_audio() -> void:
+	for i in 3:
+		var p := AudioStreamPlayer.new()
+		p.stream = SHOT_SOUND
+		p.volume_db = -5.0
+		add_child(p)
+		_shot_players.append(p)
+
+
+func _play_shot_sound() -> void:
+	if _shot_players.is_empty():
+		return
+	var p := _shot_players[_shot_voice]
+	_shot_voice = (_shot_voice + 1) % _shot_players.size()
+	p.pitch_scale = randf_range(0.96, 1.04)
+	p.volume_db = randf_range(-6.0, -4.0)
+	p.play()
 
 
 # ----------------------------------------------------------------------------
@@ -110,7 +135,12 @@ func _process(delta: float) -> void:
 
 	_firing = captured and Input.is_action_pressed("fire")
 	_sprint_fire_timer = maxf(_sprint_fire_timer - delta, 0.0)
-	_sprint_t = lerpf(_sprint_t, 1.0 if sprinting else 0.0, 1.0 - exp(-10.0 * delta))
+	# Sprint pose drops instantly when movement stops; it still ramps in when
+	# sprint begins so entering sprint does not pop the viewmodel.
+	if sprinting:
+		_sprint_t = lerpf(_sprint_t, 1.0, 1.0 - exp(-10.0 * delta))
+	else:
+		_sprint_t = 0.0
 
 	var firing_from_sprint := (_firing or _sprint_fire_timer > 0.0) \
 			and _sprint_t > 0.18 and ads_amount < 0.35
@@ -183,6 +213,7 @@ func fire() -> void:
 	_kick = minf(_kick + 0.55, 1.0)
 	_flash.visible = true
 	_flash_timer = 0.045
+	_play_shot_sound()
 
 	# Hip-fire recoil is UI-only; ADS recoil is applied to the camera.
 	if ads_amount > 0.45:

@@ -69,6 +69,9 @@ func _process(delta: float) -> void:
 	var heat := clampf((spread_radius - MIN_RADIUS) / 42.0, 0.0, 1.0)
 	_reticle_color = Color(0.94, 0.97, 1.0, 0.94).lerp(
 			Color(1.0, 0.48, 0.16, 0.98), maxf(heat, _shot_heat * 0.7))
+	# Fade the whole reticle out as the weapon settles into ADS; the hitmarker
+	# stays fully visible because it is a separate Control.
+	modulate.a = 1.0 - smoothstep(0.0, 0.85, ads)
 	queue_redraw()
 
 

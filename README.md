@@ -13,7 +13,7 @@ Open `project.godot` in Godot 4.7+ (Forward+) and press **F5**.
 | Input | Action |
 |---|---|
 | **WASD** | Move |
-| **Shift** | **Toggle sprint** (off by default). Pressing it while crouched/sliding instantly cancels the crouch and transitions to sprint. |
+| **Shift** | **Toggle sprint** (off by default). Pressing it while crouched/sliding instantly cancels the crouch and transitions to sprint. Sprint switches off the moment the movement keys are released. |
 | **C / Ctrl** | **Toggle crouch**; if you are moving fast it becomes a **slide**. Press again to stand/end the slide. |
 | **Space** | Jump / double jump / wall jump. Hold on the ground to auto-hop. |
 | **Mouse** | Look |
@@ -51,8 +51,8 @@ Open `project.godot` in Godot 4.7+ (Forward+) and press **F5**.
   random horizontal jitter, then springs back. The camera is not kicked.
   The ring's screen-space offset is projected into the world, so the rifle and
   the bullets follow exactly where the reticle is drawn.
-- **ADS recoil**: reticle movement is disabled and the recoil force is applied
-  directly to the camera instead.
+- **ADS recoil**: reticle movement is disabled, the reticle fades out, and the
+  recoil force is applied directly to the camera instead.
 - Spread also reflects movement speed, sprinting, being airborne, and ADS.
 
 ### Procedural weapon aim and arm IK
@@ -75,6 +75,12 @@ Open `project.godot` in Godot 4.7+ (Forward+) and press **F5**.
 - Hitmarkers: small diagonal ticks drawn at the **exact screen position of the
   projectile impact**, not the centre of the screen. White on a normal hit,
   larger red ticks + lower sound on a kill. See `screenshots/hitmarker.png`.
+
+### Audio
+- Rifle fire uses `assets/sounds/semiautorifleshot.wav` through a 3-voice pool
+  with slight random pitch and volume variation per shot.
+- Enemy deaths play the spatial `assets/sounds/blood_impact_.wav` at the death
+  position with a slight random pitch shift.
 
 ## File map
 
