@@ -1,9 +1,8 @@
 extends Node3D
 ## Greybox test arena + match flow + replay recording.
 ##
-##  - Kill-target match: the spawner runs until MATCH_KILL_TARGET kills, then
-##    stops. Clearing every remaining enemy triggers victory; player death
-##    triggers defeat.
+##  - Fixed-roster match: six enemies spawn at the start, then the spawner is
+##    stopped. Clearing all six triggers victory; player death triggers defeat.
 ##  - On match end a CanvasLayer result panel offers Replay Match / Save Replay
 ##    / Exit to Main Menu.
 ##  - The arena records player/enemy transforms at 20 Hz into ReplayManager.
@@ -15,7 +14,7 @@ signal defeat
 signal match_ended(result: String)
 
 const MAX_ENEMIES := 8
-const MATCH_KILL_TARGET := 6
+const MATCH_ENEMY_TOTAL := 6
 const SPAWN_INTERVAL := 3.0
 const RECORD_INTERVAL := 0.05
 const SPAWN_POINTS: Array[Vector3] = [
@@ -28,6 +27,7 @@ var _nav_source := NavigationMeshSourceGeometryData3D.new()
 var _spawn_timer: Timer
 var _player: Player
 var _kills := 0
+var _spawned := 0
 var _next_enemy_id := 1
 var _match_over := false
 var _match_time := 0.0
@@ -57,8 +57,11 @@ func _ready() -> void:
 	_build_spawn_timer()
 	_build_match_ui()
 
-	for i in 3:
+	# Fixed roster: populate once, then permanently disable the spawner for this
+	# match. No enemies are added while the player is fighting the roster.
+	for i in MATCH_ENEMY_TOTAL:
 		_spawn_enemy()
+	_spawn_timer.stop()
 	_update_objective_label()
 
 	ReplayManager.start_recording()
@@ -87,7 +90,9 @@ func _build_spawn_timer() -> void:
 
 
 func _on_spawn_timer_timeout() -> void:
-	if _match_over or _kills >= MATCH_KILL_TARGET:
+	# Safety net only. Normal matches call stop() in _ready; if this ever fires,
+	# it can never exceed the fixed roster.
+	if _match_over or _spawned >= MATCH_ENEMY_TOTAL:
 		_spawn_timer.stop()
 		return
 	if get_tree().get_nodes_in_group("enemy").size() < MAX_ENEMIES:
@@ -95,6 +100,9 @@ func _on_spawn_timer_timeout() -> void:
 
 
 func _spawn_enemy() -> void:
+	if _spawned >= MATCH_ENEMY_TOTAL:
+		return
+	_spawned += 1
 	var e := Enemy.new()
 	e.set_meta("replay_id", _next_enemy_id)
 	_next_enemy_id += 1
@@ -108,13 +116,12 @@ func _on_enemy_died() -> void:
 		return
 	_kills += 1
 	_update_objective_label()
-	if _kills >= MATCH_KILL_TARGET and _spawn_timer:
-		_spawn_timer.stop()
+	_spawn_timer.stop()
 	call_deferred("_check_victory")
 
 
 func _check_victory() -> void:
-	if _match_over or _kills < MATCH_KILL_TARGET:
+	if _match_over or _spawned < MATCH_ENEMY_TOTAL:
 		return
 	for e in get_tree().get_nodes_in_group("enemy"):
 		if is_instance_valid(e) and not e.is_queued_for_deletion():
@@ -155,14 +162,7 @@ func _end_match(result: String) -> void:
 func _update_objective_label() -> void:
 	if _objective_label == null:
 		return
-	if _kills < MATCH_KILL_TARGET:
-		_objective_label.text = "ELIMINATE  %d / %d" % [_kills, MATCH_KILL_TARGET]
-	else:
-		var remaining := 0
-		for e in get_tree().get_nodes_in_group("enemy"):
-			if is_instance_valid(e) and not e.is_queued_for_deletion():
-				remaining += 1
-		_objective_label.text = "CLEAR REMAINING  %d" % remaining
+	_objective_label.text = "ELIMINATE  %d / %d" % [_kills, MATCH_ENEMY_TOTAL]
 
 
 # ----------------------------------------------------------------------------

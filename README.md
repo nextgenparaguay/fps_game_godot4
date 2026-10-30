@@ -16,9 +16,10 @@ the startup scene.
 - Main menu (`scenes/main_menu.tscn`): **Play**, **Replays**, **Options**, and
   **Exit**, wired to real scene transitions / quit. Options stores mouse
   sensitivity and master volume in `user://settings.cfg`.
-- Matches use a kill-target spawner: after 6 eliminations the spawner stops,
-  and clearing every remaining enemy triggers **Victory**. Player death triggers
-  **Defeat**. Both stop the spawner and emit arena signals.
+- Matches use a fixed six-enemy roster spawned once at match start; the spawn
+  timer is stopped immediately, so no new enemies appear mid-fight. Clearing all
+  six triggers **Victory**; player death triggers **Defeat**. Both stop the
+  spawner and emit arena signals.
 - The post-match CanvasLayer offers **Replay Match**, **Save Replay**, and
   **Exit to Main Menu**. Saved replays are written as JSON under
   `user://replays/`; the Replays menu lists and opens them.
