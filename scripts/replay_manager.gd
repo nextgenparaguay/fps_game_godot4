@@ -7,7 +7,7 @@ extends Node
 ## user://replays/. The replay browser reads the same directory.
 
 const REPLAY_DIR := "user://replays"
-const FORMAT_VERSION := 1
+const FORMAT_VERSION := 2
 
 var current_replay: Dictionary = {}
 var pending_replay: Dictionary = {}
@@ -15,6 +15,7 @@ var selected_replay_path := ""
 
 var _recording := false
 var _frames: Array = []
+var _events: Array = []
 var _started_ms := 0
 var _start_date := ""
 
@@ -26,6 +27,7 @@ func _ready() -> void:
 func start_recording() -> void:
 	_recording = true
 	_frames.clear()
+	_events.clear()
 	_started_ms = Time.get_ticks_msec()
 	_start_date = Time.get_datetime_string_from_system(false, true)
 	current_replay = {}
@@ -41,6 +43,12 @@ func record_frame(t: float, player: Dictionary, enemies: Array) -> void:
 	_frames.append({"t": t, "player": player, "enemies": enemies})
 
 
+func record_event(t: float, event_type: String, data: Dictionary) -> void:
+	if not _recording:
+		return
+	_events.append({"t": t, "type": event_type, "data": data})
+
+
 func finish_recording(outcome: String) -> Dictionary:
 	if not _recording and not current_replay.is_empty():
 		return current_replay
@@ -48,12 +56,15 @@ func finish_recording(outcome: String) -> Dictionary:
 	var duration := 0.0
 	if not _frames.is_empty():
 		duration = float(_frames[_frames.size() - 1].get("t", 0.0))
+	_events.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["t"]) < float(b["t"]))
 	current_replay = {
 		"version": FORMAT_VERSION,
 		"date": _start_date,
 		"outcome": outcome,
 		"duration": duration,
 		"frames": _frames,
+		"events": _events,
 	}
 	return current_replay
 

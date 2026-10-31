@@ -9,6 +9,7 @@ extends CharacterBody3D
 ##  - Explodes into gibs when killed; more overkill damage => bigger explosion.
 
 signal died
+signal exploded_at(position: Vector3, intensity: float, shot_dir: Vector3)
 
 const BLOOD_SOUND := preload("res://assets/sounds/blood_impact_.wav")
 
@@ -217,6 +218,7 @@ func _explode() -> void:
 	var overkill := -health
 	var intensity := clampf(1.0 + overkill / max_health, 1.0, 2.5)
 	_play_death_sound()
+	exploded_at.emit(global_position + Vector3.UP, intensity, _last_shot_dir)
 	Gore.explode(global_position + Vector3.UP * 1.0, intensity, _last_shot_dir)
 	died.emit()
 	queue_free()

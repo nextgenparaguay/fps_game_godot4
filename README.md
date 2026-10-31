@@ -23,17 +23,30 @@ the startup scene.
 - The post-match CanvasLayer offers **Replay Match**, **Save Replay**, and
   **Exit to Main Menu**. Saved replays are written as JSON under
   `user://replays/`; the Replays menu lists and opens them.
-- The arena records player/enemy `global_transform` plus yaw, pitch, health and
-  alive state at a fixed 20 Hz into ReplayManager during `_physics_process()`.
+- The arena records player/enemy `global_transform` plus yaw, pitch, health,
+  ADS/sprint state and camera FOV at a fixed 20 Hz into ReplayManager, along with
+  shot, hit and death events.
 
 ![Match result](screenshots/match_result.png)
 
 ## Replay viewer
 
 Open the viewer from the post-match **Replay Match** button or from **Replays**
-on the main menu. Playback interpolates the recorded transforms.
+on the main menu. Playback interpolates the recorded transforms and replays
+recorded events.
 
-![Third-person replay](screenshots/replay_third.png)
+Replay fidelity includes:
+- First-person rifle viewmodel with hip/ADS/sprint poses, shot recoil and muzzle
+  flash.
+- Recorded shot tracers, impact hitmarkers, and enemy death gore (blood
+  explosion, gibs, decals).
+- Spatial 3D audio for gunshots, impacts and deaths; volume/panning follows the
+  replay camera's distance from the recorded event.
+- The live arena's exact shared level geometry (`scripts/arena_level.gd`),
+  including the slide ramp, platforms, pillars and collision, is instantiated in
+  the replay rather than a reduced proxy map.
+
+![Replay fidelity](screenshots/replay_effects.png)
 
 | Key | Camera / Action |
 |---|---|
@@ -133,6 +146,7 @@ on the main menu. Playback interpolates the recorded transforms.
 | `scripts/hitmarker.gd` | Impact-position hitmarker + hit sound |
 | `scripts/replay_manager.gd` | Autoload: recording, JSON save/load, replay list |
 | `scripts/replay_viewer.gd` | Recorded ghost playback + five camera modes |
+| `scripts/arena_level.gd` | Shared static map, ramp, lighting and colliders |
 | `scripts/main_menu.gd` | Main menu scene transitions |
 | `scripts/options.gd` | Sensitivity / volume settings |
 | `scripts/replay_browser.gd` | Saved replay list and launcher |

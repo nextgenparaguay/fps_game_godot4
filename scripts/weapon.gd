@@ -20,6 +20,9 @@ const HIT_MASK := 1 | 4              # world + enemies
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const SHOT_SOUND := preload("res://assets/sounds/semiautorifleshot.wav")
 
+signal shot_fired(muzzle: Vector3, target: Vector3, speed: float)
+signal projectile_hit(hit_pos: Vector3, lethal: bool)
+
 const HIP_POS := Vector3(0.22, -0.24, -0.56)
 const ADS_POS := Vector3(0.0, -0.069, -0.68)
 const ADS_SPEED := 12.0
@@ -207,6 +210,7 @@ func fire() -> void:
 	var projectile = ProjectileScript.new()
 	get_tree().current_scene.add_child(projectile)
 	projectile.setup(spawn, target, projectile_speed, damage, player, self)
+	shot_fired.emit(spawn, target, projectile_speed)
 
 	# Consecutive shots open the reticle up to a hard cap.
 	_bloom = minf(_bloom + bloom_per_shot_deg, max_bloom_deg)
@@ -226,6 +230,7 @@ func fire() -> void:
 
 func notify_projectile_hit(collider: Object, lethal: bool, hit_pos: Vector3) -> void:
 	if collider is Enemy:
+		projectile_hit.emit(hit_pos, lethal)
 		player.show_hitmarker(lethal, hit_pos)
 
 

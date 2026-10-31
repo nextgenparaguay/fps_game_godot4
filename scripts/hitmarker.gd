@@ -32,7 +32,7 @@ func _update_full_rect() -> void:
 			size = target_size
 
 
-func flash(kill: bool, screen_pos: Vector2) -> void:
+func flash(kill: bool, screen_pos: Vector2, play_audio := true) -> void:
 	_kill = kill
 	_screen_pos = screen_pos
 	_duration = 0.34 if kill else 0.18
@@ -40,7 +40,7 @@ func flash(kill: bool, screen_pos: Vector2) -> void:
 	if kill:
 		# The enemy's blood-impact sound owns the kill audio.
 		_player.stop()
-	else:
+	elif play_audio:
 		_player.pitch_scale = randf_range(0.97, 1.03)
 		_player.play()
 	queue_redraw()
