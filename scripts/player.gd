@@ -17,6 +17,7 @@ enum State { GROUND, AIR, SLIDE, WALLRUN }
 
 const PITCH_LIMIT := 1.55
 const ReticleScript := preload("res://scripts/reticle.gd")
+const HIT_SOUND := preload("res://assets/sounds/hitmarker-sound-effect.wav")
 const SLOW_MOTION_SCALE := 0.35
 
 # Death camera: pulls out of the player's eyes to a point behind and above the
@@ -34,6 +35,9 @@ const DEATH_CAM_WALL_MARGIN := 0.4   ## keep the camera this far from walls
 @export_group("Reticle")
 @export var reticle_firing_drag := 0.6      ## how far the reticle lags the view while firing (0 = off, 1 = stays put)
 @export var reticle_recovery_speed := 8.0   ## how fast the reticle re-centres once firing stops
+
+@export_group("Hitmarker")
+@export var hitmarker_lifetime := 0.25     ## seconds a world-space hitmarker stays at the impact point
 
 @export_group("Ground")
 @export var walk_speed := 7.0
@@ -130,7 +134,7 @@ var _recoil_yaw := 0.0
 var _hud_label: Label
 var _blood_overlay: ColorRect
 var _reticle: Control
-var _hitmarker: Hitmarker
+var _hit_sound: AudioStreamPlayer
 var hud: GameHud
 var _controls_label: Label
 var _death_cam: Camera3D
@@ -211,8 +215,10 @@ func _build_hud() -> void:
 	layer.add_child(_reticle)
 	_reticle.update_spread(weapon.current_spread_px(), weapon.ads_amount)
 
-	_hitmarker = Hitmarker.new()
-	layer.add_child(_hitmarker)
+	_hit_sound = AudioStreamPlayer.new()
+	_hit_sound.stream = HIT_SOUND
+	_hit_sound.volume_db = -4.0
+	add_child(_hit_sound)
 
 	# Health bar, ammo, weapon slots, pickup toasts and the sniper scope.
 	hud = GameHud.new()
@@ -748,10 +754,11 @@ func get_reticle_screen_center() -> Vector2:
 func show_hitmarker(kill: bool, world_pos: Vector3) -> void:
 	if _dead:
 		return                     # in-flight bullets can land after we've died
-	var screen_pos := get_viewport().get_visible_rect().size * 0.5
-	if not camera.is_position_behind(world_pos):
-		screen_pos = camera.unproject_position(world_pos)
-	_hitmarker.flash(kill, screen_pos)
+	Hitmarker.spawn(get_tree().current_scene, world_pos, kill, hitmarker_lifetime)
+	if kill:
+		return                     # the enemy's blood-impact sound owns the kill audio
+	_hit_sound.pitch_scale = randf_range(0.97, 1.03)
+	_hit_sound.play()
 
 
 ## Called by the weapon on every shot (auto and semi-auto alike): the reticle
@@ -826,7 +833,7 @@ func _die() -> void:
 func _hide_first_person_view() -> void:
 	weapon.visible = false
 	hud.visible = false                # health / ammo / scope overlay (CanvasLayer)
-	for item: CanvasItem in [_hud_label, _reticle, _hitmarker, _controls_label]:
+	for item: CanvasItem in [_hud_label, _reticle, _controls_label]:
 		item.visible = false
 
 

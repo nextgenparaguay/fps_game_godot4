@@ -14,7 +14,6 @@ const MODE_LABELS := [
 	"Static Area",
 ]
 const ArenaLevelScript := preload("res://scripts/arena_level.gd")
-const HitmarkerScript := preload("res://scripts/hitmarker.gd")
 const GUNSHOT_SOUND := preload("res://assets/sounds/semiautorifleshot.wav")
 const HIT_SOUND := preload("res://assets/sounds/hitmarker-sound-effect.wav")
 const BLOOD_SOUND := preload("res://assets/sounds/blood_impact_.wav")
@@ -41,7 +40,6 @@ var _view_weapon: Node3D
 var _weapon_flash: Node3D
 var _weapon_flash_timer := 0.0
 var _weapon_kick := 0.0
-var _hitmarker: Hitmarker
 
 var _cameras: Array[Camera3D] = []
 var _cam_fp: Camera3D
@@ -545,12 +543,7 @@ func _update_replay_weapon_pose(ps: Dictionary) -> void:
 
 
 func _show_replay_hitmarker(world_pos: Vector3, kill: bool) -> void:
-	if _hitmarker == null:
-		return
-	var cam := get_viewport().get_camera_3d()
-	if cam == null or cam.is_position_behind(world_pos):
-		return
-	_hitmarker.flash(kill, cam.unproject_position(world_pos), false)
+	Hitmarker.spawn(self, world_pos, kill)
 
 
 func _spawn_tracer(from: Vector3, to: Vector3, speed: float) -> void:
@@ -698,10 +691,6 @@ func _build_ui() -> void:
 	_ui_root.size = vp
 	_ui_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_ui_root)
-
-	# Impact markers are drawn in screen space at the recorded hit location.
-	_hitmarker = HitmarkerScript.new()
-	_ui_root.add_child(_hitmarker)
 
 	var panel := PanelContainer.new()
 	panel.position = Vector2(24, 22)

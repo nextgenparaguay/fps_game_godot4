@@ -204,10 +204,12 @@ godot --headless --path . --fixed-fps 60 --scene res://tests/match_end_test.tscn
   prevent enemies from stacking on the same spot.
 - Enemies flash red on hit, and explode on death into rigid-body flesh chunks,
   blood particle sprays, directional blood mist and procedural blood decals.
-- Hitmarkers: small diagonal ticks drawn at the **exact screen position of the
-  projectile impact**, not the centre of the screen. Normal hits use
-  `assets/sounds/hitmarker-sound-effect.wav`; kill ticks are red and silent so
-  the spatial blood-impact sound takes priority. See `screenshots/hitmarker.png`.
+- Hitmarkers: small diagonal ticks spawned in **3D world space at the exact
+  projectile impact point**. They stay fixed there for `hitmarker_lifetime`
+  seconds (export on the Player, default 0.25), fading out before freeing
+  themselves; a billboard `Sprite3D` keeps them facing the camera at a constant
+  on-screen size. Normal hits use `assets/sounds/hitmarker-sound-effect.wav`;
+  kill ticks are red and silent so the spatial blood-impact sound takes priority.
 
 ### Audio
 - Rifle fire uses `assets/sounds/semiautorifleshot.wav` through a 3-voice pool
@@ -230,7 +232,7 @@ godot --headless --path . --fixed-fps 60 --scene res://tests/match_end_test.tscn
 | `scripts/weapon.gd` | Rifle model, fire control, bloom, procedural aim/IK |
 | `scripts/projectile.gd` | Travelling bullet with swept collision and impact FX |
 | `scripts/reticle.gd` | Dynamic spread ring + UI recoil |
-| `scripts/hitmarker.gd` | Impact-position hitmarker + hit sound |
+| `scripts/hitmarker.gd` | World-space billboard hitmarker (spawned at the impact point) |
 | `scripts/replay_manager.gd` | Autoload: recording, JSON save/load, replay list |
 | `scripts/replay_viewer.gd` | Recorded ghost playback + five camera modes |
 | `scripts/arena_level.gd` | Shared static map, ramp, lighting and colliders |

@@ -1,67 +1,63 @@
 class_name Hitmarker
-extends Control
-## Four small diagonal ticks at the exact screen position of the impact.
-## Normal hit = white ticks + the hitmarker WAV; kill = larger red ticks but no
-## hitmarker audio, so the spatial blood-impact sound stays clear.
+extends Sprite3D
+## World-space hitmarker: four small diagonal ticks that appear at the exact 3D
+## impact point, stay fixed there for `lifetime` seconds while fading out, then
+## free themselves. It is a billboard, so it always faces the camera, and it has
+## a fixed on-screen size, so it stays legible at any distance. Normal hit = white,
+## kill = larger and red. (The hit sound is played by the Player, not here, so a
+## short lifetime can't cut the sound off.)
 
-const HIT_SOUND := preload("res://assets/sounds/hitmarker-sound-effect.wav")
+const DEFAULT_LIFETIME := 0.25
+const TEX_SIZE := 64
+const PIXEL_SIZE := 0.0009           # with fixed_size: roughly 0.75 screen px per texel
+const KILL_SCALE := 1.35
+const KILL_COLOR := Color(1.0, 0.15, 0.1)
 
-var _t := 0.0
-var _duration := 0.18
-var _kill := false
-var _screen_pos := Vector2.ZERO
-var _player: AudioStreamPlayer
-
-
-func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_update_full_rect()
-
-	_player = AudioStreamPlayer.new()
-	_player.stream = HIT_SOUND
-	_player.volume_db = -4.0
-	add_child(_player)
+static var _texture: ImageTexture
 
 
-func _update_full_rect() -> void:
-	var vp := get_viewport()
-	if vp:
-		var target_size := vp.get_visible_rect().size
-		if size != target_size:
-			size = target_size
+## Creates a hitmarker at `world_pos` under `parent` and returns it.
+static func spawn(parent: Node, world_pos: Vector3, kill: bool,
+		lifetime := DEFAULT_LIFETIME) -> Hitmarker:
+	var m := Hitmarker.new()
+	parent.add_child(m)
+	m.global_position = world_pos
+	m.start(kill, lifetime)
+	return m
 
 
-func flash(kill: bool, screen_pos: Vector2, play_audio := true) -> void:
-	_kill = kill
-	_screen_pos = screen_pos
-	_duration = 0.34 if kill else 0.18
-	_t = 1.0
+func start(kill: bool, lifetime: float) -> void:
+	texture = _get_texture()
+	pixel_size = PIXEL_SIZE
+	billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	fixed_size = true
+	no_depth_test = true              # never hidden by (or clipped into) the surface it hit
+	shaded = false
+	double_sided = true
+	render_priority = 10
 	if kill:
-		# The enemy's blood-impact sound owns the kill audio.
-		_player.stop()
-	elif play_audio:
-		_player.pitch_scale = randf_range(0.97, 1.03)
-		_player.play()
-	queue_redraw()
+		modulate = KILL_COLOR
+		scale = Vector3.ONE * KILL_SCALE
+	var tween := create_tween()
+	tween.tween_property(self, "modulate:a", 0.0, maxf(lifetime, 0.01))
+	tween.tween_callback(queue_free)
 
 
-func _process(delta: float) -> void:
-	_update_full_rect()
-	if _t > 0.0:
-		_t = maxf(_t - delta / _duration, 0.0)
-		queue_redraw()
-
-
-func _draw() -> void:
-	if _t <= 0.0:
-		return
-	var c := _screen_pos
-	var k := 1.0 - _t                                   # 0 -> 1 over the animation
-	var inner := lerpf(7.0, 3.5, minf(k * 5.0, 1.0)) if not _kill else lerpf(9.0, 5.0, minf(k * 4.0, 1.0))
-	var length := 6.0 if not _kill else 8.5
-	var width := 1.6 if not _kill else 2.3
-	var col := Color(1, 1, 1, _t) if not _kill else Color(1.0, 0.15, 0.1, minf(_t * 1.6, 1.0))
-	for d in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
-		var dir: Vector2 = d.normalized()
-		draw_line(c + dir * inner, c + dir * (inner + length), col, width, true)
+## Four soft-edged diagonal ticks around an empty centre, drawn once and shared.
+static func _get_texture() -> ImageTexture:
+	if _texture:
+		return _texture
+	var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
+	var c := (TEX_SIZE - 1) * 0.5
+	for y in TEX_SIZE:
+		for x in TEX_SIZE:
+			var ax := absf(x - c)
+			var ay := absf(y - c)
+			var along := (ax + ay) * 0.7071           # distance out along the diagonal
+			var perp := absf(ax - ay) * 0.7071        # distance from the diagonal's centre line
+			var a := clampf(2.2 - perp, 0.0, 1.0) \
+					* clampf(along - 8.0, 0.0, 1.0) \
+					* clampf(25.0 - along, 0.0, 1.0)
+			img.set_pixel(x, y, Color(1, 1, 1, a))
+	_texture = ImageTexture.create_from_image(img)
+	return _texture
