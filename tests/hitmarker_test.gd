@@ -30,7 +30,7 @@ func _run() -> void:
 	_check(_markers(arena).is_empty(), "no hitmarker before a hit")
 
 	var hit := Vector3(3.0, 1.5, -12.0)
-	player.hitmarker_lifetime = 0.3
+	player.hitmarker_lifetime = 1.5
 	player.show_hitmarker(false, hit)
 	var found := _markers(arena)
 	_check(found.size() == 1, "a hit spawns exactly one hitmarker")
@@ -48,7 +48,19 @@ func _run() -> void:
 	var kill: Hitmarker = _markers(arena).filter(func(n): return n != m)[0]
 	_check(kill.modulate.r > 0.9 and kill.modulate.g < 0.3, "kill marker is red")
 
-	await get_tree().create_timer(0.6).timeout
+	# Zooming must not change the on-screen size: apparent size ~ scale / tan(fov/2).
+	var cam := player.camera
+	var apparent := func() -> float: return m.scale.x / tan(deg_to_rad(cam.fov) * 0.5)
+	player.base_fov = 65.0
+	await get_tree().create_timer(0.5).timeout
+	var wide: float = apparent.call()
+	player.base_fov = 20.0
+	await get_tree().create_timer(0.5).timeout
+	var narrow: float = apparent.call()
+	_check(cam.fov < 30.0, "camera zoomed in (fov %.1f)" % cam.fov)
+	_check(absf(wide - narrow) / wide < 0.02, "on-screen size is the same zoomed in or out (%.3f vs %.3f)" % [wide, narrow])
+
+	await get_tree().create_timer(0.9).timeout
 	_check(not is_instance_valid(m) and not is_instance_valid(kill), "freed after hitmarker_lifetime")
 	_check(_markers(arena).is_empty(), "no hitmarkers left over")
 

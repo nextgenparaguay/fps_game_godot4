@@ -39,6 +39,10 @@ const DEATH_CAM_WALL_MARGIN := 0.4   ## keep the camera this far from walls
 @export_group("Hitmarker")
 @export var hitmarker_lifetime := 0.25     ## seconds a world-space hitmarker stays at the impact point
 
+@export_group("Aim Assist")
+@export var enable_aim_assist := true       ## gently pull the reticle toward nearby enemies (hip-fire only)
+@export_range(0.0, 1.0, 0.01) var aim_assist_strength := 0.35   ## fraction of the distance to the enemy to pull
+
 @export_group("Ground")
 @export var walk_speed := 7.0
 @export var sprint_speed := 9.5
@@ -685,6 +689,10 @@ func _update_view(delta: float, input: Vector2) -> void:
 	_reticle.update_spread(weapon.current_spread_px(), ads)
 	_fire_drag_timer = maxf(_fire_drag_timer - delta, 0.0)
 	_reticle.update_drag(_fire_drag_timer > 0.0, reticle_recovery_speed)
+	var assist := Vector2.ZERO
+	if enable_aim_assist and not _dead and ads <= 0.45:
+		assist = AimAssist.pull(camera, aim_assist_strength)
+	_reticle.set_assist_target(assist)
 
 	_blood_overlay.color.a = move_toward(_blood_overlay.color.a, 0.0, delta * 0.35)
 
@@ -741,13 +749,13 @@ func is_dead() -> bool:
 	return _dead
 
 
-## Screen-space centre of the reticle, including its UI recoil offset. The
+## Screen-space centre of the reticle, including its recoil, aim-lag and aim-assist offsets. The
 ## weapon projects this point into the world for proc-aim and bullet direction.
 func get_reticle_screen_center() -> Vector2:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var offset := Vector2.ZERO
 	if _reticle:
-		offset = _reticle.recoil_offset + _reticle.drag_offset
+		offset = _reticle.recoil_offset + _reticle.drag_offset + _reticle.assist_offset
 	return viewport_size * 0.5 + offset
 
 

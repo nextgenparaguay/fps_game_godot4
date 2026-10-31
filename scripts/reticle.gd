@@ -12,6 +12,8 @@ const MIN_RADIUS := 5.0
 const MAX_RECOIL := Vector2(46.0, 46.0)
 const MAX_DRAG := 70.0              # px: furthest the reticle can trail the view centre
 const FIRING_CATCHUP := 0.25        # while firing, recovery runs at this fraction
+const MAX_ASSIST := 60.0            # px: furthest aim assist can pull the reticle
+const ASSIST_SMOOTH := 10.0         # how quickly the reticle follows the pull
 
 var spread_radius := 10.0
 var recoil_offset := Vector2.ZERO
@@ -19,6 +21,10 @@ var ads := 0.0
 ## Aim lag: how far the reticle trails the camera centre while firing. It is part
 ## of the aim point, so bullets follow the lagging reticle.
 var drag_offset := Vector2.ZERO
+## Aim assist: a separate, additive offset toward a nearby enemy. It never touches
+## recoil_offset or drag_offset, so assist and aim lag cannot fight each other.
+var assist_offset := Vector2.ZERO
+var _assist_target := Vector2.ZERO
 var _firing := false
 var _recovery_speed := 8.0
 
@@ -53,6 +59,12 @@ func update_spread(radius_px: float, ads_amount: float) -> void:
 func update_drag(firing: bool, recovery_speed: float) -> void:
 	_firing = firing
 	_recovery_speed = recovery_speed
+
+
+## Called by the player every frame with the pixel pull toward the nearest enemy
+## (ZERO for none). The reticle eases toward it, which keeps it jitter-free.
+func set_assist_target(px: Vector2) -> void:
+	_assist_target = px
 
 
 ## Called by the player when the view turns while firing. `px` is the screen-space
@@ -94,6 +106,14 @@ func _process(delta: float) -> void:
 		drag_speed = 28.0
 	drag_offset = drag_offset.lerp(Vector2.ZERO, 1.0 - exp(-drag_speed * delta))
 
+	# Aim assist eases toward its target; off in ADS, where the reticle is hidden.
+	var assist_rate := ASSIST_SMOOTH
+	if ads > 0.45:
+		_assist_target = Vector2.ZERO
+		assist_rate = 28.0
+	assist_offset = assist_offset.lerp(_assist_target, 1.0 - exp(-assist_rate * delta)) \
+			.limit_length(MAX_ASSIST)
+
 	var heat := clampf((spread_radius - MIN_RADIUS) / 42.0, 0.0, 1.0)
 	_reticle_color = Color(0.94, 0.97, 1.0, 0.94).lerp(
 			Color(1.0, 0.48, 0.16, 0.98), maxf(heat, _shot_heat * 0.7))
@@ -104,7 +124,7 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var center := size * 0.5 + recoil_offset + drag_offset
+	var center := size * 0.5 + recoil_offset + drag_offset + assist_offset
 	var radius := spread_radius
 
 	# Low-alpha outer bloom ring makes the spread readable even against bright

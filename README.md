@@ -186,6 +186,14 @@ godot --headless --path . --fixed-fps 60 --scene res://tests/match_end_test.tscn
 - **ADS recoil**: reticle movement is disabled, the reticle fades out, and the
   recoil force is applied directly to the camera instead.
 - Spread also reflects movement speed, sprinting, being airborne, and ADS.
+- **Aim lag** (hip-fire, auto and semi-auto): while firing, turning the view makes
+  the reticle trail behind the view centre, then it re-centres smoothly when
+  firing stops. Tune with `reticle_firing_drag` and `reticle_recovery_speed` on
+  the Player.
+- **Aim assist** (hip-fire): `enable_aim_assist` / `aim_assist_strength` on the
+  Player gently pull the reticle toward the enemy nearest the view centre, if it
+  is visible. It is a separate offset from the recoil and aim-lag offsets, so the
+  three simply add together and never fight each other.
 
 ### Procedural weapon aim and arm IK
 - The rifle pivot is rotated every frame so its bore points exactly at the world
@@ -232,6 +240,7 @@ godot --headless --path . --fixed-fps 60 --scene res://tests/match_end_test.tscn
 | `scripts/weapon.gd` | Rifle model, fire control, bloom, procedural aim/IK |
 | `scripts/projectile.gd` | Travelling bullet with swept collision and impact FX |
 | `scripts/reticle.gd` | Dynamic spread ring + UI recoil |
+| `scripts/aim_assist.gd` | Magnetic aim assist: pixel pull toward the nearest visible enemy |
 | `scripts/hitmarker.gd` | World-space billboard hitmarker (spawned at the impact point) |
 | `scripts/replay_manager.gd` | Autoload: recording, JSON save/load, replay list |
 | `scripts/replay_viewer.gd` | Recorded ghost playback + five camera modes |

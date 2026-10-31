@@ -12,6 +12,9 @@ const TEX_SIZE := 64
 const PIXEL_SIZE := 0.0009           # with fixed_size: roughly 0.75 screen px per texel
 const KILL_SCALE := 1.35
 const KILL_COLOR := Color(1.0, 0.15, 0.1)
+const REFERENCE_FOV := 65.0          ## vertical FOV the marker size above was tuned at
+
+var _base_scale := 1.0
 
 static var _texture: ImageTexture
 
@@ -37,10 +40,26 @@ func start(kill: bool, lifetime: float) -> void:
 	render_priority = 10
 	if kill:
 		modulate = KILL_COLOR
-		scale = Vector3.ONE * KILL_SCALE
+		_base_scale = KILL_SCALE
+	_apply_fov_scale()
 	var tween := create_tween()
 	tween.tween_property(self, "modulate:a", 0.0, maxf(lifetime, 0.01))
 	tween.tween_callback(queue_free)
+
+
+func _process(_delta: float) -> void:
+	_apply_fov_scale()
+
+
+## `fixed_size` keeps the marker the same size at any distance, but it still
+## magnifies when the FOV narrows (ADS, speed FOV). Scaling by tan(fov/2) cancels
+## that, so the marker keeps the same on-screen size at every zoom level.
+func _apply_fov_scale() -> void:
+	var cam := get_viewport().get_camera_3d()
+	var k := 1.0
+	if cam:
+		k = tan(deg_to_rad(cam.fov) * 0.5) / tan(deg_to_rad(REFERENCE_FOV) * 0.5)
+	scale = Vector3.ONE * _base_scale * k
 
 
 ## Four soft-edged diagonal ticks around an empty centre, drawn once and shared.
