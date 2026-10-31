@@ -14,6 +14,7 @@ enum State { GROUND, AIR, SLIDE, WALLRUN }
 
 const PITCH_LIMIT := 1.55
 const ReticleScript := preload("res://scripts/reticle.gd")
+const SLOW_MOTION_SCALE := 0.35
 
 @export_group("Look")
 @export var mouse_sensitivity := 0.0022
@@ -105,6 +106,7 @@ var _eye := 1.65
 var _land_dip := 0.0
 var _roll := 0.0
 var _dead := false
+var _bullet_time := false
 var _recoil_pitch := 0.0
 var _recoil_yaw := 0.0
 
@@ -188,7 +190,7 @@ func _build_hud() -> void:
 	layer.add_child(_hitmarker)
 
 	var controls := Label.new()
-	controls.text = "Shift: sprint toggle   C/Ctrl: slide/crouch toggle   RMB: ADS   LMB: fire"
+	controls.text = "Shift: sprint toggle   C/Ctrl: slide/crouch toggle   RMB: ADS   LMB: fire   F: bullet time"
 	controls.add_theme_font_size_override("font_size", 13)
 	controls.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
 	controls.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -203,6 +205,7 @@ func _ensure_input_actions() -> void:
 		"move_left": [KEY_A], "move_right": [KEY_D],
 		"jump": [KEY_SPACE], "slide": [KEY_C, KEY_CTRL],
 		"sprint": [KEY_SHIFT],
+		"slow_motion": [KEY_F],
 		"weapon_1": [KEY_1], "weapon_2": [KEY_2],
 	}
 	for action in keys:
@@ -232,6 +235,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		rotate_y(-m.relative.x * sens)
 		head.rotation.x = clampf(head.rotation.x - m.relative.y * sens,
 				-PITCH_LIMIT, PITCH_LIMIT)
+	elif event.is_action_pressed("slow_motion"):
+		toggle_bullet_time()
 	elif event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
@@ -644,8 +649,25 @@ func _update_hud() -> void:
 		flags += "  CROUCH"
 	if weapon.ads_amount > 0.45:
 		flags += "  ADS"
+	if _bullet_time:
+		flags += "  BULLET TIME"
 	_hud_label.text = "Speed %.1f m/s   %s   HP %d   [%s]%s" % [
 		_horizontal_speed(), State.find_key(state), int(health), weapon.current_name(), flags]
+
+
+## F toggles a simple global slow-motion effect. Time scale is restored on
+## death and when leaving the match so menus/replays are never accelerated.
+func toggle_bullet_time() -> void:
+	_bullet_time = not _bullet_time
+	Engine.time_scale = SLOW_MOTION_SCALE if _bullet_time else 1.0
+	if _hud_label:
+		_update_hud()
+
+
+func _exit_tree() -> void:
+	if _bullet_time:
+		Engine.time_scale = 1.0
+		_bullet_time = false
 
 
 func is_sprinting() -> bool:
@@ -701,6 +723,9 @@ func take_damage(amount: float, _hit_pos := Vector3.ZERO, _hit_normal := Vector3
 	_blood_overlay.color.a = maxf(_blood_overlay.color.a, 0.25)
 	if health <= 0.0:
 		_dead = true
+		if _bullet_time:
+			Engine.time_scale = 1.0
+			_bullet_time = false
 		died.emit()
 
 

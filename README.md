@@ -70,6 +70,7 @@ Replay fidelity includes:
 | **Mouse** | Look |
 | **LMB** | Fire the automatic rifle (physical projectiles) |
 | **RMB (hold)** | Aim down sights — zooms the camera, tightens spread, and the rifle's iron sights align. |
+| **F** | Toggle bullet time (0.35× global time scale). |
 | **Esc** | Release the mouse |
 
 ## Implemented mechanics
