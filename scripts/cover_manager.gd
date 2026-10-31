@@ -57,8 +57,13 @@ func setup(data: Array) -> void:
 ## Prefers spots inside [range_min, range_max] of the threat and close to the
 ## enemy. An enemy that is too far away prefers spots *nearer the threat than
 ## itself*, so groups advance cover-to-cover instead of walking in the open.
+##
+## `press` > 0 makes the enemy aggressive: while it is still outside `range_min`,
+## every metre by which a spot is *not* at least 2 m closer to the threat than the
+## enemy already is costs `press` extra score, so relocations gain ground instead
+## of backing off. 0 keeps the original neutral behaviour.
 func find_cover(enemy: Node3D, threat_eye: Vector3, range_min: float, range_max: float,
-		avoid: CoverPoint = null) -> CoverPoint:
+		avoid: CoverPoint = null, press := 0.0) -> CoverPoint:
 	var me := enemy.global_position
 	var me_id := enemy.get_instance_id()
 	var my_dist := Vector2(me.x - threat_eye.x, me.z - threat_eye.z).length()
@@ -85,7 +90,11 @@ func find_cover(enemy: Node3D, threat_eye: Vector3, range_min: float, range_max:
 		if my_dist > range_max and d > my_dist - 2.0:
 			advance = d - (my_dist - 2.0)
 		var directness := (1.0 + c.normal.dot(dir)) * 2.0        # square-on to the player is best
-		var score := penalty * 2.0 + me.distance_to(c.pos) * 0.35 + advance + directness + randf() * 2.0
+		var press_cost := 0.0
+		if press > 0.0 and my_dist > range_min:
+			press_cost = press * maxf(d - (my_dist - 2.0), 0.0)
+		var score := penalty * 2.0 + me.distance_to(c.pos) * 0.35 + advance + directness \
+				+ randf() * 2.0 + press_cost
 		scored.append([score, c])
 
 	scored.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
