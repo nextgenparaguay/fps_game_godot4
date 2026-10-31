@@ -21,6 +21,18 @@ const TRACER_MATERIAL := Color(1.0, 0.62, 0.18)
 const ENEMY_TRACER := Color(1.0, 0.22, 0.14)
 const CORE_MATERIAL := Color(1.0, 0.92, 0.62)
 
+## Incoming-bullet warning: five clips cut from the supplied SFX. Each clip's
+## loudest moment is INCOMING_PEAKS[i] seconds after it starts.
+const INCOMING_SOUNDS := [
+	preload("res://assets/sounds/incoming_bullet_1.wav"),
+	preload("res://assets/sounds/incoming_bullet_2.wav"),
+	preload("res://assets/sounds/incoming_bullet_3.wav"),
+	preload("res://assets/sounds/incoming_bullet_4.wav"),
+	preload("res://assets/sounds/incoming_bullet_5.wav"),
+]
+const INCOMING_PEAKS := [0.275, 0.195, 0.260, 0.221, 0.276]
+const INCOMING_HIT_RADIUS := 1.5      # bullet must pass within this of the player
+
 var speed := 160.0
 var damage := 15.0
 var gravity := 0.0
@@ -35,6 +47,9 @@ var _age := 0.0
 var _dead := false
 var _trail: MeshInstance3D
 var _trail_particles: CPUParticles3D
+var _incoming_played := false
+var _incoming_idx := -1
+var _incoming_pitch := 1.0
 
 
 func setup(from: Vector3, to: Vector3, shot_speed: float, shot_damage: float,
@@ -155,6 +170,8 @@ func _physics_process(delta: float) -> void:
 		return
 
 	global_position = to
+	if not _incoming_played and hit_mask == ENEMY_HIT_MASK:
+		_check_incoming()
 	# Keep the streak aligned if gravity bends the path.
 	if _velocity.length_squared() > 0.001:
 		var dir := _velocity.normalized()
@@ -162,6 +179,41 @@ func _physics_process(delta: float) -> void:
 		if absf(dir.dot(up)) > 0.98:
 			up = Vector3.RIGHT
 		look_at(global_position + dir, up)
+
+
+## Cheap distance check (no extra physics query). A clip and pitch are chosen
+## up front; the sound starts once the bullet is within the distance it covers in
+## (peak / pitch) seconds, so the clip's loudest moment lands on impact. The bullet
+## must also be heading at the player and pass close, otherwise it is a near miss.
+func _check_incoming() -> void:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null:
+		return
+	if _incoming_idx < 0:
+		_incoming_idx = randi() % INCOMING_SOUNDS.size()
+		_incoming_pitch = randf_range(0.9, 1.1)
+	var peak: float = INCOMING_PEAKS[_incoming_idx]
+	var to_player := (player.global_position + Vector3.UP) - global_position
+	var dist := to_player.length()
+	if dist > speed * peak / _incoming_pitch:
+		return
+	var dir := _velocity.normalized()
+	if dir.dot(to_player) <= 0.0:
+		return
+	if dir.cross(to_player).length() > INCOMING_HIT_RADIUS:
+		return    # passing by too far away to be a hit
+	_incoming_played = true
+	var root := get_tree().current_scene
+	if root == null:
+		return
+	var p := AudioStreamPlayer.new()      # non-positional: it is "on" the player
+	p.stream = INCOMING_SOUNDS[_incoming_idx]
+	p.pitch_scale = _incoming_pitch
+	root.add_child(p)
+	p.finished.connect(p.queue_free)
+	# Playback runs at pitch_scale, so the remaining flight time covers
+	# (dist / speed * pitch) seconds of sample; skip ahead if we triggered late.
+	p.play(maxf(0.0, peak - dist / speed * _incoming_pitch))
 
 
 func _impact(hit: Dictionary) -> void:
