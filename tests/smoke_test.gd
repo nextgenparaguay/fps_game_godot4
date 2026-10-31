@@ -111,16 +111,15 @@ func _test_heal_and_hud() -> void:
 
 
 func _test_enemy_ai() -> void:
-	print("== cover-based enemy AI")
+	print("== aggressive cover-based enemy AI")
 	var shots := [0]
+	var heard := [0]             # shots that already had a gunshot voice playing when they were fired
 	var seen: Dictionary = {}
-	var enemy_hits := [0]
-	# Make sure the match has spawned enemies, then watch them for a while.
-	for e in get_tree().get_nodes_in_group("enemy"):
-		if not e.shot_fired.is_connected(_on_shot):
-			e.shot_fired.connect(func(_m: Vector3, _t: Vector3, _s: float) -> void: shots[0] += 1)
+	var moving_samples := [0]
+	var back_turned := [0]       # moving samples where the enemy's back was to the player
 	var start_hp := _player.health
 	var charged := 0
+	# Make sure the match has spawned enemies, then watch them for a while.
 	for tick in 60 * 40:
 		await get_tree().process_frame
 		# Keep the player alive and still so the AI has a steady target.
@@ -129,11 +128,19 @@ func _test_enemy_ai() -> void:
 			for e in get_tree().get_nodes_in_group("enemy"):
 				if not e.has_meta("_watched"):
 					e.set_meta("_watched", true)
-					e.shot_fired.connect(func(_m: Vector3, _t: Vector3, _s: float) -> void: shots[0] += 1)
+					e.shot_fired.connect(_on_enemy_shot.bind(e, shots, heard))
 				seen[e.state] = int(seen.get(e.state, 0)) + 1
 				if e.global_position.distance_to(_player.global_position) < 3.0:
 					charged += 1
-		if shots[0] >= 8 and seen.has(Enemy.State.HOLD) and seen.has(Enemy.State.PEEK):
+				# Target lock: an enemy that is moving must still face the player.
+				if Vector2(e.velocity.x, e.velocity.z).length() > 1.0:
+					moving_samples[0] += 1
+					var to_p: Vector3 = _player.global_position - e.global_position
+					to_p.y = 0.0
+					var fwd: Vector3 = -e.global_transform.basis.z
+					if fwd.dot(to_p.normalized()) < 0.0:
+						back_turned[0] += 1
+		if shots[0] >= 8 and moving_samples[0] >= 3 and seen.has(Enemy.State.HOLD) and seen.has(Enemy.State.PEEK):
 			break
 	var names := []
 	for k in seen:
@@ -145,11 +152,30 @@ func _test_enemy_ai() -> void:
 	_check(seen.has(Enemy.State.PEEK), "enemies peek out to fire")
 	_check(shots[0] > 0, "enemies shoot with projectiles (%d shots)" % shots[0])
 	_check(charged == 0, "no enemy rushed into melee range")
+	_check(moving_samples[0] > 0 and back_turned[0] == 0,
+			"moving enemies keep facing the player (%d moving samples, %d with back turned)" % [moving_samples[0], back_turned[0]])
+	_check(shots[0] > 0 and heard[0] == shots[0],
+			"every live enemy shot plays a gunshot (%d of %d)" % [heard[0], shots[0]])
+	var spatial_ok := true
+	for e in get_tree().get_nodes_in_group("enemy"):
+		var voices := e.find_children("*", "AudioStreamPlayer3D", true, false)
+		if voices.is_empty():
+			spatial_ok = false
+		for v: AudioStreamPlayer3D in voices:
+			if v.stream == null or v.max_distance < 50.0 or v.unit_size <= 0.0:
+				spatial_ok = false
+	_check(spatial_ok, "enemy gunfire uses positional AudioStreamPlayer3D voices")
 	print("    player hp %.0f -> %.0f (healed during test)" % [start_hp, _player.health])
 
 
-func _on_shot(_m: Vector3, _t: Vector3, _s: float) -> void:
-	pass
+## Counts a shot, and whether a gunshot voice was audible at the moment it fired.
+## Bound arguments arrive after the signal's own (muzzle, target, speed).
+func _on_enemy_shot(_m: Vector3, _t: Vector3, _s: float, e: Enemy, shots: Array, heard: Array) -> void:
+	shots[0] += 1
+	for p: AudioStreamPlayer3D in e._shot_players:
+		if p.playing:
+			heard[0] += 1
+			return
 
 
 func _test_loot() -> void:
