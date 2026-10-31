@@ -26,7 +26,6 @@ signal shot_fired(muzzle: Vector3, target: Vector3, speed: float)
 
 enum State { ADVANCE, TO_COVER, HOLD, PEEK }
 
-const BLOOD_SOUND := preload("res://assets/sounds/blood_impact_.wav")
 const STAND_EYE := 1.55
 const STAND_HEIGHT := 1.8
 const CROUCH_HEIGHT := 1.1
@@ -612,26 +611,8 @@ func _explode() -> void:
 	_release_cover()
 	var overkill := -health
 	var intensity := clampf(1.0 + overkill / max_health, 1.0, 2.5)
-	_play_death_sound()
+	Gore.play_death_sound(global_position + Vector3.UP)
 	exploded_at.emit(global_position + Vector3.UP, intensity, _last_shot_dir)
 	Gore.explode(global_position + Vector3.UP * 1.0, intensity, _last_shot_dir)
 	died.emit()
 	queue_free()
-
-
-## Spatial death squelch. A small random pitch shift keeps repeated kills from
-## sounding identical.
-func _play_death_sound() -> void:
-	var root := get_tree().current_scene
-	if root == null:
-		return
-	var p := AudioStreamPlayer3D.new()
-	p.stream = BLOOD_SOUND
-	p.pitch_scale = randf_range(0.92, 1.08)
-	p.volume_db = randf_range(-4.0, -2.0)
-	p.unit_size = 7.0
-	p.max_distance = 70.0
-	root.add_child(p)
-	p.global_position = global_position + Vector3.UP * 1.0
-	p.finished.connect(p.queue_free)
-	p.play()

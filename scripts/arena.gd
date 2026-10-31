@@ -4,7 +4,10 @@ extends Node3D
 ##  - Fixed-roster match: six enemies spawn at the start, then the spawner is
 ##    stopped. Clearing all six triggers victory; player death triggers defeat.
 ##  - On match end a CanvasLayer result panel offers Replay Match / Save Replay
-##    / Exit to Main Menu.
+##    / Exit to Main Menu. It appears after a short real-time delay so the end
+##    of the match can play out first: ~2 s after a win (during which the world
+##    runs in slow motion right after the last kill) and ~5 s after the player
+##    dies (the player's death burst and death camera).
 ##  - The arena records player/enemy transforms at 20 Hz into ReplayManager.
 ##  - A navigation mesh is baked at startup from the same boxes the level is
 ##    built from, so enemies path-find around walls, pillars and platforms.
@@ -17,6 +20,10 @@ const MAX_ENEMIES := 8
 const MATCH_ENEMY_TOTAL := 6
 const SPAWN_INTERVAL := 3.0
 const RECORD_INTERVAL := 0.05
+const RESULT_DELAY_VICTORY := 2.0      ## real seconds from the last kill to the result panel
+const RESULT_DELAY_DEFEAT := 5.0       ## real seconds from the player's death to the result panel
+const VICTORY_SLOWMO_SCALE := 0.2      ## Engine.time_scale right after the last kill
+const VICTORY_SLOWMO_RAMP := 0.8       ## real seconds spent easing back to normal speed
 const ArenaLevelScript := preload("res://scripts/arena_level.gd")
 const SPAWN_POINTS: Array[Vector3] = [
 	Vector3(-40, 1, 40), Vector3(40, 1, 40), Vector3(0, 1, 60), Vector3(-60, 1, -20),
@@ -34,6 +41,7 @@ var _next_enemy_id := 1
 var _match_over := false
 var _match_time := 0.0
 var _record_accum := 0.0
+var _slowmo_tween: Tween
 
 var _match_layer: CanvasLayer
 var _objective_label: Label
@@ -60,6 +68,7 @@ func _ready() -> void:
 	add_child(_player)
 	_player.global_position = Vector3(0, 0.5, 14)
 	_player.died.connect(_on_player_died)
+	_player.exploded_at.connect(_on_player_exploded)
 	_player.weapon.shot_fired.connect(_on_weapon_shot_fired)
 	_player.weapon.projectile_hit.connect(_on_weapon_projectile_hit)
 
@@ -127,14 +136,24 @@ func _spawn_enemy() -> void:
 
 
 func _on_enemy_exploded(pos: Vector3, intensity: float, shot_dir: Vector3) -> void:
+	_record_death_event(pos, intensity, shot_dir)
+	# Randomized loot (ammo / medkits / weapons / ordnance) where the enemy died.
+	if not _match_over and _player != null and not _player.is_dead():
+		LootTable.spawn_drops(self, pos - Vector3.UP, _player)
+
+
+## The player bursting into gibs is recorded like an enemy death so replays show
+## it too, but (unlike enemies) it drops no loot.
+func _on_player_exploded(pos: Vector3, intensity: float, shot_dir: Vector3) -> void:
+	_record_death_event(pos, intensity, shot_dir)
+
+
+func _record_death_event(pos: Vector3, intensity: float, shot_dir: Vector3) -> void:
 	ReplayManager.record_event(_match_time, "death", {
 		"pos": _vec(pos),
 		"intensity": intensity,
 		"dir": _vec(shot_dir),
 	})
-	# Randomized loot (ammo / medkits / weapons / ordnance) where the enemy died.
-	if not _match_over and _player != null and not _player.is_dead():
-		LootTable.spawn_drops(self, pos - Vector3.UP, _player)
 
 
 ## Enemy bullets are recorded as "shot" events too (tagged src = enemy) so the
@@ -203,18 +222,52 @@ func _end_match(result: String) -> void:
 	for e in get_tree().get_nodes_in_group("enemy"):
 		if is_instance_valid(e):
 			e.set_physics_process(false)
-	if _player:
-		_player.set_physics_process(false)
-		if _player.weapon:
-			_player.weapon.set_process(false)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_show_result_ui(result)
+
+	var delay := RESULT_DELAY_DEFEAT
+	if result == "victory":
+		delay = RESULT_DELAY_VICTORY
+		_start_victory_slow_motion(delay)
+	elif _objective_label:
+		_objective_label.visible = false
+
+	# Real-time timer (ignores Engine.time_scale) so the delays stay ~2 s / ~5 s
+	# even while the victory slow motion is running.
+	get_tree().create_timer(delay, true, false, true).timeout.connect(
+			_show_result_ui.bind(result))
 
 	if result == "victory":
 		victory.emit()
 	else:
 		defeat.emit()
 	match_ended.emit(result)
+
+
+## Slow motion right after the last kill: drop to VICTORY_SLOWMO_SCALE, hold,
+## then ease back to normal speed so it is over when the result panel appears.
+## The player keeps control during it; only bullet time is locked out (so it
+## can't fight this effect) and damage is ignored.
+func _start_victory_slow_motion(duration: float) -> void:
+	if _player:
+		_player.lock_bullet_time()
+		_player.invulnerable = true
+	Engine.time_scale = VICTORY_SLOWMO_SCALE
+	_slowmo_tween = create_tween()
+	_slowmo_tween.set_ignore_time_scale(true)
+	_slowmo_tween.tween_interval(maxf(duration - VICTORY_SLOWMO_RAMP, 0.0))
+	_slowmo_tween.tween_property(Engine, "time_scale", 1.0, VICTORY_SLOWMO_RAMP) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+func _stop_slow_motion() -> void:
+	if _slowmo_tween:
+		_slowmo_tween.kill()
+		_slowmo_tween = null
+	Engine.time_scale = 1.0
+
+
+func _exit_tree() -> void:
+	# Never leave the next scene (menu / replay viewer) in slow motion.
+	_stop_slow_motion()
 
 
 func _update_objective_label() -> void:
@@ -380,6 +433,12 @@ func _build_match_ui() -> void:
 
 
 func _show_result_ui(result: String) -> void:
+	_stop_slow_motion()
+	if _player and is_instance_valid(_player):
+		_player.set_physics_process(false)
+		if _player.weapon:
+			_player.weapon.set_process(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_result_layer.visible = true
 	if result == "victory":
 		_result_title.text = "VICTORY"

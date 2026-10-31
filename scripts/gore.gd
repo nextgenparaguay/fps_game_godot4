@@ -4,6 +4,7 @@ extends Node
 ## Gore.explode(pos, intensity, shot_dir)  - bloody enemy explosion
 ## Gore.blood_puff(pos, normal)            - small hit spray
 ## Gore.splat_toward(origin, dir, size)    - blood decal on whatever is in that direction
+## Gore.play_death_sound(pos)              - spatial squelch for an exploding actor
 ##
 ## Everything is procedural (no assets): flesh chunks are boxes/spheres, blood
 ## droplets are particles, and blood splats are generated into textures at
@@ -12,6 +13,7 @@ extends Node
 signal exploded(position: Vector3, intensity: float)
 
 const WORLD_MASK := 1
+const BLOOD_SOUND := preload("res://assets/sounds/blood_impact_.wav")
 
 var max_gibs := 160
 var max_decals := 150
@@ -76,6 +78,25 @@ func explode(pos: Vector3, intensity: float, shot_dir: Vector3) -> void:
 	_emit_blood(root, pos, Vector3.UP, int(120 * intensity), 1.0, 1.5, 6.0, 180.0)
 
 	_splatter(pos, intensity)
+
+
+## Spatial death squelch, shared by every actor that explodes (enemies and the
+## player). A small random pitch shift keeps repeated kills from sounding
+## identical.
+func play_death_sound(pos: Vector3) -> void:
+	var root := get_tree().current_scene
+	if root == null:
+		return
+	var p := AudioStreamPlayer3D.new()
+	p.stream = BLOOD_SOUND
+	p.pitch_scale = _rng.randf_range(0.92, 1.08)
+	p.volume_db = _rng.randf_range(-4.0, -2.0)
+	p.unit_size = 7.0
+	p.max_distance = 70.0
+	root.add_child(p)
+	p.global_position = pos
+	p.finished.connect(p.queue_free)
+	p.play()
 
 
 func blood_puff(pos: Vector3, normal: Vector3) -> void:

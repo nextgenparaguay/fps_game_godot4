@@ -20,8 +20,20 @@ the startup scene.
   timer is stopped immediately, so no new enemies appear mid-fight. Clearing all
   six triggers **Victory**; player death triggers **Defeat**. Both stop the
   spawner and emit arena signals.
+- **Player death:** the player bursts into gibs exactly like an enemy (same
+  gore, blood sound and replay `death` event, with the spray following the
+  killing blow; no loot drops), the first-person view and HUD are hidden, and
+  the camera eases out of the player's eyes to a spot behind/above the death
+  location (swinging around or shortening if a wall is in the way), looking at
+  it.
+- **Victory:** the world drops into slow motion (`VICTORY_SLOWMO_SCALE`) right
+  after the last enemy dies and eases back to normal speed. During that window
+  the player keeps control but takes no damage, and bullet time (F) is locked.
 - The post-match CanvasLayer offers **Replay Match**, **Save Replay**, and
-  **Exit to Main Menu**. Saved replays are written as JSON under
+  **Exit to Main Menu**. It appears after a real-time delay so the ending can
+  play out: ~2 s after a win, ~5 s after dying (`RESULT_DELAY_VICTORY` /
+  `RESULT_DELAY_DEFEAT` in `arena.gd`). Esc (pause) is disabled from the moment
+  the match ends. Saved replays are written as JSON under
   `user://replays/`; the Replays menu lists and opens them.
 - The arena records player/enemy `global_transform` plus yaw, pitch, health,
   ADS/sprint state and camera FOV at a fixed 20 Hz into ReplayManager, along with
@@ -142,6 +154,7 @@ Headless integration tests (Godot 4.7):
 ```
 godot --headless --path . --fixed-fps 60 --scene res://tests/smoke_test.tscn
 godot --headless --path . --fixed-fps 60 --scene res://tests/replay_test.tscn
+godot --headless --path . --fixed-fps 60 --scene res://tests/match_end_test.tscn
 ```
 
 ### Dynamic reticle / recoil

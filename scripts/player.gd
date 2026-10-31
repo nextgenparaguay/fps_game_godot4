@@ -9,12 +9,22 @@ extends CharacterBody3D
 
 signal health_changed(new_health: float)
 signal died
+## Emitted when the player bursts into gibs, mirroring Enemy.exploded_at so the
+## arena can record it for replays.
+signal exploded_at(position: Vector3, intensity: float, shot_dir: Vector3)
 
 enum State { GROUND, AIR, SLIDE, WALLRUN }
 
 const PITCH_LIMIT := 1.55
 const ReticleScript := preload("res://scripts/reticle.gd")
 const SLOW_MOTION_SCALE := 0.35
+
+# Death camera: pulls out of the player's eyes to a point behind and above the
+# spot where they died, looking at that spot.
+const DEATH_CAM_DURATION := 4.5      ## seconds (real time) for the zoom-out
+const DEATH_CAM_DISTANCE := 7.0      ## horizontal pull-back from the death spot
+const DEATH_CAM_HEIGHT := 4.0        ## rise above the death spot
+const DEATH_CAM_WALL_MARGIN := 0.4   ## keep the camera this far from walls
 
 @export_group("Look")
 @export var mouse_sensitivity := 0.0022
@@ -106,6 +116,8 @@ var _land_dip := 0.0
 var _roll := 0.0
 var _dead := false
 var _bullet_time := false
+var _bullet_time_locked := false
+var _last_hit_dir := Vector3.ZERO
 var _recoil_pitch := 0.0
 var _recoil_yaw := 0.0
 
@@ -114,6 +126,12 @@ var _blood_overlay: ColorRect
 var _reticle: Control
 var _hitmarker: Hitmarker
 var hud: GameHud
+var _controls_label: Label
+var _death_cam: Camera3D
+
+## Ignores all damage. The arena sets it once the match is won, so leftover
+## bullets / grenades can't "kill" a winner during the victory slow motion.
+var invulnerable := false
 
 
 func _ready() -> void:
@@ -136,6 +154,7 @@ func _ready() -> void:
 	_build_hud()
 	Gore.exploded.connect(_on_gore_exploded)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	set_process(false)           # only needed after death (see _process)
 
 
 # ----------------------------------------------------------------------------
@@ -194,14 +213,14 @@ func _build_hud() -> void:
 	add_child(hud)
 	hud.setup(self)
 
-	var controls := Label.new()
-	controls.text = "Shift: sprint   C/Ctrl: slide/crouch   RMB: ADS   LMB: fire   R: reload   1/3/4: weapon slots   F: bullet time   Esc: pause"
-	controls.add_theme_font_size_override("font_size", 13)
-	controls.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
-	controls.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	controls.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT,
+	_controls_label = Label.new()
+	_controls_label.text = "Shift: sprint   C/Ctrl: slide/crouch   RMB: ADS   LMB: fire   R: reload   1/3/4: weapon slots   F: bullet time   Esc: pause"
+	_controls_label.add_theme_font_size_override("font_size", 13)
+	_controls_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
+	_controls_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_controls_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT,
 			Control.PRESET_MODE_MINSIZE, 10)
-	layer.add_child(controls)
+	layer.add_child(_controls_label)
 
 
 func _ensure_input_actions() -> void:
@@ -235,6 +254,8 @@ func _ensure_input_actions() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _dead:
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var m := event as InputEventMouseMotion
 		var sens := mouse_sensitivity * lerpf(1.0, 1.0 / weapon.current_zoom(), weapon.ads_amount)
@@ -662,10 +683,23 @@ func _update_hud() -> void:
 ## F toggles a simple global slow-motion effect. Time scale is restored on
 ## death and when leaving the match so menus/replays are never accelerated.
 func toggle_bullet_time() -> void:
+	if _bullet_time_locked:
+		return
 	_bullet_time = not _bullet_time
 	Engine.time_scale = SLOW_MOTION_SCALE if _bullet_time else 1.0
 	if _hud_label:
 		_update_hud()
+
+
+## Cancels bullet time and stops it from being toggled again. Called when the
+## match ends so the player can't fight the arena's own time-scale effects.
+func lock_bullet_time() -> void:
+	_bullet_time_locked = true
+	if _bullet_time:
+		_bullet_time = false
+		Engine.time_scale = 1.0
+		if _hud_label:
+			_update_hud()
 
 
 func _exit_tree() -> void:
@@ -695,6 +729,8 @@ func get_reticle_screen_center() -> Vector2:
 
 
 func show_hitmarker(kill: bool, world_pos: Vector3) -> void:
+	if _dead:
+		return                     # in-flight bullets can land after we've died
 	var screen_pos := get_viewport().get_visible_rect().size * 0.5
 	if not camera.is_position_behind(world_pos):
 		screen_pos = camera.unproject_position(world_pos)
@@ -729,19 +765,99 @@ func heal(amount: float) -> float:
 	return health - before
 
 
+## `dir` is the direction the damage travelled (attacker -> player); it steers
+## the death burst.
 func take_damage(amount: float, _hit_pos := Vector3.ZERO, _hit_normal := Vector3.ZERO,
-		_dir := Vector3.ZERO) -> void:
-	if _dead:
+		dir := Vector3.ZERO) -> void:
+	if _dead or invulnerable:
 		return
 	health -= amount
 	health_changed.emit(health)
 	_blood_overlay.color.a = maxf(_blood_overlay.color.a, 0.25)
 	if health <= 0.0:
 		_dead = true
-		if _bullet_time:
-			Engine.time_scale = 1.0
-			_bullet_time = false
-		died.emit()
+		_last_hit_dir = dir
+		lock_bullet_time()
+		# Deferred like Enemy._explode: don't spawn physics bodies mid-physics-step
+		_die.call_deferred()
+
+
+## Player equivalent of Enemy._explode: gory burst + the death camera.
+func _die() -> void:
+	var overkill := -health
+	var intensity := clampf(1.0 + overkill / max_health, 1.0, 2.5)
+	var burst_pos := global_position + Vector3.UP
+
+	collision_layer = 0                # nothing should bump into the invisible corpse
+	_hide_first_person_view()
+	set_process(true)                  # fades the blood overlay (see _process)
+
+	Gore.play_death_sound(burst_pos)
+	exploded_at.emit(burst_pos, intensity, _last_hit_dir)
+	Gore.explode(burst_pos, intensity, _last_hit_dir)
+
+	_start_death_camera(burst_pos)
+	died.emit()
+
+
+func _hide_first_person_view() -> void:
+	weapon.visible = false
+	hud.visible = false                # health / ammo / scope overlay (CanvasLayer)
+	for item: CanvasItem in [_hud_label, _reticle, _hitmarker, _controls_label]:
+		item.visible = false
+
+
+## Detaches a new camera from the player at the current eye transform and eases
+## it back and up to a spot where it looks down at the death burst.
+func _start_death_camera(focus: Vector3) -> void:
+	var start := camera.global_transform
+	var end_pos := _find_death_cam_position(focus)
+	var start_rot := start.basis.get_rotation_quaternion()
+	var end_rot := Basis.looking_at(focus - end_pos, Vector3.UP).get_rotation_quaternion()
+
+	_death_cam = Camera3D.new()
+	_death_cam.top_level = true        # ignore the (now frozen) player transform
+	_death_cam.near = camera.near
+	_death_cam.fov = camera.fov
+	add_child(_death_cam)
+	_death_cam.global_transform = start
+	_death_cam.make_current()
+
+	var tween := create_tween()
+	tween.set_ignore_time_scale(true)  # same pacing regardless of slow motion
+	tween.tween_method(func(t: float) -> void:
+			_death_cam.global_transform = Transform3D(
+					Basis(start_rot.slerp(end_rot, t)), start.origin.lerp(end_pos, t)),
+			0.0, 1.0, DEATH_CAM_DURATION) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+## Picks where the death camera ends up: behind the player (opposite their
+## facing) and above, falling back to other angles / a shorter pull-back when a
+## wall is in the way so the camera never ends up inside geometry.
+func _find_death_cam_position(focus: Vector3) -> Vector3:
+	var space := get_world_3d().direct_space_state
+	var back := global_transform.basis.z           # body only yaws, so this is horizontal
+	var best := focus
+	var best_clear := -1.0
+	for yaw_deg: float in [0.0, 40.0, -40.0, 80.0, -80.0, 120.0, -120.0, 180.0]:
+		var offset := back.rotated(Vector3.UP, deg_to_rad(yaw_deg)) * DEATH_CAM_DISTANCE \
+				+ Vector3.UP * DEATH_CAM_HEIGHT
+		var hit := space.intersect_ray(
+				PhysicsRayQueryParameters3D.create(focus, focus + offset, 1))
+		if hit.is_empty():
+			return focus + offset                  # fully clear: take the first such angle
+		var clear := maxf(focus.distance_to(hit["position"]) - DEATH_CAM_WALL_MARGIN, 0.0)
+		if clear > best_clear:
+			best_clear = clear
+			best = focus + offset.normalized() * clear
+	return best
+
+
+## Only enabled after death: the physics tick (which normally fades the blood
+## overlay in _update_view) stops running once the player is dead.
+func _process(delta: float) -> void:
+	_blood_overlay.color.a = move_toward(_blood_overlay.color.a, 0.0, delta * 0.35)
 
 
 func _on_gore_exploded(pos: Vector3, intensity: float) -> void:
