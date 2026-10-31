@@ -10,10 +10,17 @@ extends Control
 
 const MIN_RADIUS := 5.0
 const MAX_RECOIL := Vector2(46.0, 46.0)
+const MAX_DRAG := 70.0              # px: furthest the reticle can trail the view centre
+const FIRING_CATCHUP := 0.25        # while firing, recovery runs at this fraction
 
 var spread_radius := 10.0
 var recoil_offset := Vector2.ZERO
 var ads := 0.0
+## Aim lag: how far the reticle trails the camera centre while firing. It is part
+## of the aim point, so bullets follow the lagging reticle.
+var drag_offset := Vector2.ZERO
+var _firing := false
+var _recovery_speed := 8.0
 
 var _target_radius := 10.0
 var _shot_heat := 0.0
@@ -42,6 +49,20 @@ func update_spread(radius_px: float, ads_amount: float) -> void:
 	ads = clampf(ads_amount, 0.0, 1.0)
 
 
+## Called by the player every frame with the current firing state and tuning.
+func update_drag(firing: bool, recovery_speed: float) -> void:
+	_firing = firing
+	_recovery_speed = recovery_speed
+
+
+## Called by the player when the view turns while firing. `px` is the screen-space
+## amount the reticle should fall behind (opposite to the turn). Ignored in ADS.
+func add_look_drag(px: Vector2) -> void:
+	if ads > 0.45:
+		return
+	drag_offset = (drag_offset + px).limit_length(MAX_DRAG)
+
+
 ## Called by the weapon for hip-fire recoil. ADS ignores this by design.
 func add_shot_recoil(up_px: float, jitter_px: float) -> void:
 	if ads > 0.45:
@@ -66,6 +87,13 @@ func _process(delta: float) -> void:
 	else:
 		recoil_offset = recoil_offset.lerp(Vector2.ZERO, recoil_rate * 0.55)
 
+	# Aim lag re-centres smoothly: slowly while firing (the reticle keeps trailing),
+	# at full recovery speed once firing stops, and fast in ADS.
+	var drag_speed := _recovery_speed * (FIRING_CATCHUP if _firing else 1.0)
+	if ads > 0.45:
+		drag_speed = 28.0
+	drag_offset = drag_offset.lerp(Vector2.ZERO, 1.0 - exp(-drag_speed * delta))
+
 	var heat := clampf((spread_radius - MIN_RADIUS) / 42.0, 0.0, 1.0)
 	_reticle_color = Color(0.94, 0.97, 1.0, 0.94).lerp(
 			Color(1.0, 0.48, 0.16, 0.98), maxf(heat, _shot_heat * 0.7))
@@ -76,7 +104,7 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var center := size * 0.5 + recoil_offset
+	var center := size * 0.5 + recoil_offset + drag_offset
 	var radius := spread_radius
 
 	# Low-alpha outer bloom ring makes the spread readable even against bright

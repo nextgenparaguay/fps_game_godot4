@@ -525,6 +525,7 @@ func fire() -> void:
 	(_model["flash"] as Node3D).visible = true
 	_flash_timer = 0.045
 	_play_shot_sound()
+	player.mark_firing()
 
 	# Hip-fire recoil is UI-only; ADS recoil is applied to the camera.
 	if ads_amount > 0.45:

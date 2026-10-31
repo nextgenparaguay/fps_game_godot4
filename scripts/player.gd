@@ -31,6 +31,10 @@ const DEATH_CAM_WALL_MARGIN := 0.4   ## keep the camera this far from walls
 @export var base_fov := 65.0
 @export var ads_move_mult := 0.6         ## movement speed multiplier while aiming
 
+@export_group("Reticle")
+@export var reticle_firing_drag := 0.6      ## how far the reticle lags the view while firing (0 = off, 1 = stays put)
+@export var reticle_recovery_speed := 8.0   ## how fast the reticle re-centres once firing stops
+
 @export_group("Ground")
 @export var walk_speed := 7.0
 @export var sprint_speed := 9.5
@@ -118,6 +122,8 @@ var _dead := false
 var _bullet_time := false
 var _bullet_time_locked := false
 var _last_hit_dir := Vector3.ZERO
+const FIRE_DRAG_HOLD := 0.3     ## s after a shot during which the reticle resists turning
+var _fire_drag_timer := 0.0
 var _recoil_pitch := 0.0
 var _recoil_yaw := 0.0
 
@@ -253,15 +259,24 @@ func _ensure_input_actions() -> void:
 		InputMap.action_add_event("fire", mb)
 
 
+## Applies a mouse movement (in pixels) to the view. While firing, the reticle
+## falls behind the turn instead of tracking the view centre.
+func _look(relative: Vector2) -> void:
+	var sens := mouse_sensitivity * lerpf(1.0, 1.0 / weapon.current_zoom(), weapon.ads_amount)
+	rotate_y(-relative.x * sens)
+	head.rotation.x = clampf(head.rotation.x - relative.y * sens,
+			-PITCH_LIMIT, PITCH_LIMIT)
+	if _fire_drag_timer > 0.0 and _reticle:
+		var px_per_rad := get_viewport().get_visible_rect().size.y * 0.5 \
+				/ tan(deg_to_rad(camera.fov) * 0.5)
+		_reticle.add_look_drag(-relative * sens * px_per_rad * reticle_firing_drag)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _dead:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		var m := event as InputEventMouseMotion
-		var sens := mouse_sensitivity * lerpf(1.0, 1.0 / weapon.current_zoom(), weapon.ads_amount)
-		rotate_y(-m.relative.x * sens)
-		head.rotation.x = clampf(head.rotation.x - m.relative.y * sens,
-				-PITCH_LIMIT, PITCH_LIMIT)
+		_look((event as InputEventMouseMotion).relative)
 	elif event.is_action_pressed("slow_motion"):
 		toggle_bullet_time()
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
@@ -662,6 +677,8 @@ func _update_view(delta: float, input: Vector2) -> void:
 
 	# The reticle ring tracks the weapon's live angular spread in pixels.
 	_reticle.update_spread(weapon.current_spread_px(), ads)
+	_fire_drag_timer = maxf(_fire_drag_timer - delta, 0.0)
+	_reticle.update_drag(_fire_drag_timer > 0.0, reticle_recovery_speed)
 
 	_blood_overlay.color.a = move_toward(_blood_overlay.color.a, 0.0, delta * 0.35)
 
@@ -724,7 +741,7 @@ func get_reticle_screen_center() -> Vector2:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var offset := Vector2.ZERO
 	if _reticle:
-		offset = _reticle.recoil_offset
+		offset = _reticle.recoil_offset + _reticle.drag_offset
 	return viewport_size * 0.5 + offset
 
 
@@ -735,6 +752,12 @@ func show_hitmarker(kill: bool, world_pos: Vector3) -> void:
 	if not camera.is_position_behind(world_pos):
 		screen_pos = camera.unproject_position(world_pos)
 	_hitmarker.flash(kill, screen_pos)
+
+
+## Called by the weapon on every shot (auto and semi-auto alike): the reticle
+## resists turning for the next FIRE_DRAG_HOLD seconds.
+func mark_firing() -> void:
+	_fire_drag_timer = FIRE_DRAG_HOLD
 
 
 ## Hip-fire recoil is given to the reticle UI (up + horizontal jitter).
