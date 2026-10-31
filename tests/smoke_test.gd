@@ -8,6 +8,10 @@ extends Node
 var _fails := 0
 var _arena: Node
 var _player: Player
+## Enemies are aggressive and the early phases leave the player standing still for
+## over a minute of game time, so keep the player topped up between phases.
+## (Switched off around checks that depend on exact health.)
+var _keep_alive := true
 
 
 func _check(ok: bool, what: String) -> void:
@@ -19,6 +23,8 @@ func _check(ok: bool, what: String) -> void:
 func _frames(n: int) -> void:
 	for i in n:
 		await get_tree().process_frame
+		if _keep_alive and _player != null and is_instance_valid(_player) and not _player.is_dead():
+			_player.heal(1000.0)
 
 
 func _ready() -> void:
@@ -47,7 +53,15 @@ func _run() -> void:
 	await _test_pause()
 
 	print("== result: %d failure(s)" % _fails)
-	get_tree().quit(1 if _fails > 0 else 0)
+	# Free the arena first so no enemy gunshot is still playing at exit (otherwise
+	# the engine reports the live AudioStreamPlaybacks as leaked).
+	var tree := get_tree()
+	if is_instance_valid(tree.current_scene):
+		tree.current_scene.queue_free()
+	await _frames(3)
+	OS.delay_msec(300)           # frames run faster than real time; let the audio thread release the voices
+	await _frames(1)
+	tree.quit(1 if _fails > 0 else 0)
 
 
 func _test_slots() -> void:
@@ -124,7 +138,7 @@ func _test_enemy_ai() -> void:
 		await get_tree().process_frame
 		# Keep the player alive and still so the AI has a steady target.
 		if tick % 30 == 0:
-			_player.heal(15.0)
+			_player.heal(1000.0)
 			for e in get_tree().get_nodes_in_group("enemy"):
 				if not e.has_meta("_watched"):
 					e.set_meta("_watched", true)
@@ -189,6 +203,7 @@ func _test_loot() -> void:
 	# Walk onto them: they should be collected.
 	var w := _player.weapon
 	var reserve_before := w.ammo_reserve()
+	_keep_alive = false          # the medkit check below compares exact health
 	_player.take_damage(50.0)
 	var hp_before := _player.health
 	for p in get_tree().get_nodes_in_group("pickup"):
