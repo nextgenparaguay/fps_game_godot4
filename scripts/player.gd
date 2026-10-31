@@ -42,6 +42,7 @@ const DEATH_CAM_WALL_MARGIN := 0.4   ## keep the camera this far from walls
 @export_group("Aim Assist")
 @export var enable_aim_assist := true       ## gently pull the reticle toward nearby enemies (hip-fire only)
 @export_range(0.0, 1.0, 0.01) var aim_assist_strength := 0.35   ## fraction of the distance to the enemy to pull
+@export_range(0.0, 2.0, 0.05) var lead_prediction_factor := 1.0   ## how far ahead of moving enemies the assist aims (0 = off, 1 = full lead)
 
 @export_group("Ground")
 @export var walk_speed := 7.0
@@ -691,7 +692,8 @@ func _update_view(delta: float, input: Vector2) -> void:
 	_reticle.update_drag(_fire_drag_timer > 0.0, reticle_recovery_speed)
 	var assist := Vector2.ZERO
 	if enable_aim_assist and not _dead and ads <= 0.45:
-		assist = AimAssist.pull(camera, aim_assist_strength)
+		var bullet_speed := float(weapon.current_def.get("speed", 0.0)) if weapon.is_gun() else 0.0
+		assist = AimAssist.pull(camera, aim_assist_strength, lead_prediction_factor, bullet_speed)
 	_reticle.set_assist_target(assist)
 
 	_blood_overlay.color.a = move_toward(_blood_overlay.color.a, 0.0, delta * 0.35)
