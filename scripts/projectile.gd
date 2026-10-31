@@ -50,6 +50,7 @@ var _trail_particles: CPUParticles3D
 var _incoming_played := false
 var _incoming_idx := -1
 var _incoming_pitch := 1.0
+var _incoming_player: AudioStreamPlayer3D
 
 
 func setup(from: Vector3, to: Vector3, shot_speed: float, shot_damage: float,
@@ -203,13 +204,16 @@ func _check_incoming() -> void:
 	if dir.cross(to_player).length() > INCOMING_HIT_RADIUS:
 		return    # passing by too far away to be a hit
 	_incoming_played = true
-	var root := get_tree().current_scene
-	if root == null:
-		return
-	var p := AudioStreamPlayer.new()      # non-positional: it is "on" the player
+	var p := AudioStreamPlayer3D.new()    # rides on the bullet, so it is heard where it is
 	p.stream = INCOMING_SOUNDS[_incoming_idx]
 	p.pitch_scale = _incoming_pitch
-	root.add_child(p)
+	p.unit_size = 10.0
+	p.max_distance = 80.0
+	p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	p.attenuation_filter_cutoff_hz = 20500.0   # no distance muffling, like enemy gunfire
+	p.panning_strength = 1.0
+	add_child(p)
+	_incoming_player = p
 	p.finished.connect(p.queue_free)
 	# Playback runs at pitch_scale, so the remaining flight time covers
 	# (dist / speed * pitch) seconds of sample; skip ahead if we triggered late.
@@ -222,6 +226,10 @@ func _impact(hit: Dictionary) -> void:
 	var hit_normal: Vector3 = hit["normal"]
 	var collider: Object = hit["collider"]
 	var dir := _velocity.normalized()
+
+	# Hand the warning sound to the scene so its tail isn't cut when the bullet frees.
+	if is_instance_valid(_incoming_player) and get_tree().current_scene != null:
+		_incoming_player.reparent(get_tree().current_scene)
 
 	if collider and collider.has_method("take_damage"):
 		# Enemy.take_damage returns whether the hit was lethal; Player.take_damage

@@ -8,8 +8,8 @@ func _ready() -> void:
 
 func _count_sfx() -> Array:
 	var out := []
-	for c in get_children():
-		if c is AudioStreamPlayer and RifleProjectile.INCOMING_SOUNDS.has(c.stream):
+	for c in find_children("*", "AudioStreamPlayer3D", true, false):
+		if RifleProjectile.INCOMING_SOUNDS.has(c.stream):
 			out.append(c)
 	return out
 
