@@ -8,18 +8,25 @@ extends Node3D
 ## is still aimed at the point under the reticle, but the damage only happens
 ## when the projectile actually gets there, so moving targets can be missed.
 ##
+## The same projectile is used by enemies: set `hit_mask` (world + player) and
+## `tracer_tint` before calling setup(), and pass weapon = null.
+##
 ## No gravity is applied by default: the projectile flies flat from the muzzle
 ## to the reticle's projected world point. Set `gravity` to a positive value if
 ## you want visible bullet drop later (then add the matching aim compensation).
 
-const HIT_MASK := 1 | 4              # world (1) + enemies (4)
+const HIT_MASK := 1 | 4              # world (1) + enemies (4): the player's default
+const ENEMY_HIT_MASK := 1 | 2        # world (1) + player (2): what enemy bullets hit
 const TRACER_MATERIAL := Color(1.0, 0.62, 0.18)
+const ENEMY_TRACER := Color(1.0, 0.22, 0.14)
 const CORE_MATERIAL := Color(1.0, 0.92, 0.62)
 
 var speed := 160.0
 var damage := 15.0
 var gravity := 0.0
 var max_lifetime := 3.0
+var hit_mask := HIT_MASK
+var tracer_tint := TRACER_MATERIAL
 
 var _velocity := Vector3.ZERO
 var _shooter: Node3D
@@ -31,7 +38,7 @@ var _trail_particles: CPUParticles3D
 
 
 func setup(from: Vector3, to: Vector3, shot_speed: float, shot_damage: float,
-		shooter: Node3D, weapon: Weapon) -> void:
+		shooter: Node3D, weapon: Weapon = null) -> void:
 	speed = shot_speed
 	damage = shot_damage
 	_shooter = shooter
@@ -51,9 +58,9 @@ func setup(from: Vector3, to: Vector3, shot_speed: float, shot_damage: float,
 
 func _build_tracer(dir: Vector3) -> void:
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = TRACER_MATERIAL
+	mat.albedo_color = tracer_tint
 	mat.emission_enabled = true
-	mat.emission = TRACER_MATERIAL
+	mat.emission = tracer_tint
 	mat.emission_energy_multiplier = 3.0
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -82,16 +89,16 @@ func _build_tracer(dir: Vector3) -> void:
 	_trail_particles.initial_velocity_max = 0.0
 	_trail_particles.scale_amount_min = 0.3
 	_trail_particles.scale_amount_max = 0.8
-	_trail_particles.color = TRACER_MATERIAL
+	_trail_particles.color = tracer_tint
 	var wake_mesh := SphereMesh.new()
 	wake_mesh.radius = 0.018
 	wake_mesh.height = 0.036
 	wake_mesh.radial_segments = 4
 	wake_mesh.rings = 2
 	var wake_mat := StandardMaterial3D.new()
-	wake_mat.albedo_color = TRACER_MATERIAL
+	wake_mat.albedo_color = tracer_tint
 	wake_mat.emission_enabled = true
-	wake_mat.emission = TRACER_MATERIAL
+	wake_mat.emission = tracer_tint
 	wake_mat.emission_energy_multiplier = 2.0
 	wake_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	wake_mesh.material = wake_mat
@@ -100,9 +107,9 @@ func _build_tracer(dir: Vector3) -> void:
 	add_child(_trail_particles)
 
 	var core_mat := StandardMaterial3D.new()
-	core_mat.albedo_color = CORE_MATERIAL
+	core_mat.albedo_color = CORE_MATERIAL.lerp(tracer_tint, 0.0 if tracer_tint == TRACER_MATERIAL else 0.6)
 	core_mat.emission_enabled = true
-	core_mat.emission = CORE_MATERIAL
+	core_mat.emission = core_mat.albedo_color
 	core_mat.emission_energy_multiplier = 5.0
 	core_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	var core_mesh := SphereMesh.new()
@@ -140,7 +147,7 @@ func _physics_process(delta: float) -> void:
 	var exclude: Array[RID] = []
 	if is_instance_valid(_shooter) and _shooter is CollisionObject3D:
 		exclude.append((_shooter as CollisionObject3D).get_rid())
-	var query := PhysicsRayQueryParameters3D.create(from, to, HIT_MASK, exclude)
+	var query := PhysicsRayQueryParameters3D.create(from, to, hit_mask, exclude)
 	query.hit_from_inside = false
 	var hit := space.intersect_ray(query)
 	if not hit.is_empty():
@@ -165,7 +172,10 @@ func _impact(hit: Dictionary) -> void:
 	var dir := _velocity.normalized()
 
 	if collider and collider.has_method("take_damage"):
-		var lethal: bool = collider.take_damage(damage, hit_pos, hit_normal, dir)
+		# Enemy.take_damage returns whether the hit was lethal; Player.take_damage
+		# returns nothing, so don't assume a bool.
+		var result = collider.take_damage(damage, hit_pos, hit_normal, dir)
+		var lethal: bool = result is bool and result
 		if is_instance_valid(_weapon):
 			_weapon.notify_projectile_hit(collider, lethal, hit_pos)
 		_spawn_impact(hit_pos, hit_normal, true)

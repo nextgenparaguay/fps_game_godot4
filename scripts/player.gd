@@ -19,7 +19,6 @@ const SLOW_MOTION_SCALE := 0.35
 @export_group("Look")
 @export var mouse_sensitivity := 0.0022
 @export var base_fov := 65.0
-@export var ads_zoom := 3.5              ## FOV zoom factor while aiming down sights
 @export var ads_move_mult := 0.6         ## movement speed multiplier while aiming
 
 @export_group("Ground")
@@ -114,6 +113,7 @@ var _hud_label: Label
 var _blood_overlay: ColorRect
 var _reticle: Control
 var _hitmarker: Hitmarker
+var hud: GameHud
 
 
 func _ready() -> void:
@@ -189,8 +189,13 @@ func _build_hud() -> void:
 	_hitmarker = Hitmarker.new()
 	layer.add_child(_hitmarker)
 
+	# Health bar, ammo, weapon slots, pickup toasts and the sniper scope.
+	hud = GameHud.new()
+	add_child(hud)
+	hud.setup(self)
+
 	var controls := Label.new()
-	controls.text = "Shift: sprint toggle   C/Ctrl: slide/crouch toggle   RMB: ADS   LMB: fire   F: bullet time"
+	controls.text = "Shift: sprint   C/Ctrl: slide/crouch   RMB: ADS   LMB: fire   R: reload   1/3/4: weapon slots   F: bullet time   Esc: pause"
 	controls.add_theme_font_size_override("font_size", 13)
 	controls.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
 	controls.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -206,7 +211,8 @@ func _ensure_input_actions() -> void:
 		"jump": [KEY_SPACE], "slide": [KEY_C, KEY_CTRL],
 		"sprint": [KEY_SHIFT],
 		"slow_motion": [KEY_F],
-		"weapon_1": [KEY_1], "weapon_2": [KEY_2],
+		"slot_1": [KEY_1], "slot_2": [KEY_3], "slot_3": [KEY_4],   # CS 1.6-style weapon slots
+		"reload": [KEY_R],
 	}
 	for action in keys:
 		if InputMap.has_action(action):
@@ -231,14 +237,12 @@ func _ensure_input_actions() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var m := event as InputEventMouseMotion
-		var sens := mouse_sensitivity * lerpf(1.0, 1.0 / ads_zoom, weapon.ads_amount)
+		var sens := mouse_sensitivity * lerpf(1.0, 1.0 / weapon.current_zoom(), weapon.ads_amount)
 		rotate_y(-m.relative.x * sens)
 		head.rotation.x = clampf(head.rotation.x - m.relative.y * sens,
 				-PITCH_LIMIT, PITCH_LIMIT)
 	elif event.is_action_pressed("slow_motion"):
 		toggle_bullet_time()
-	elif event.is_action_pressed("ui_cancel"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -279,7 +283,7 @@ func _physics_process(delta: float) -> void:
 			_cancel_crouch_for_sprint()
 		else:
 			_sprint_toggle = not _sprint_toggle
-	if Input.is_action_pressed("ads"):
+	if Input.is_action_pressed("ads") and weapon.can_ads():
 		_sprint_toggle = false         # aiming cancels sprint
 
 	# Godot's forward is -Z, get_vector's "up" is negative Y => forward = input.y < 0
@@ -629,10 +633,10 @@ func _update_view(delta: float, input: Vector2) -> void:
 	camera.rotation.x = _recoil_pitch
 	camera.rotation.y = _recoil_yaw
 
-	# FOV: widens with speed, narrows when aiming (zoom factor = ads_zoom)
+	# FOV: widens with speed, narrows when aiming (zoom factor comes from the equipped weapon)
 	var ads := weapon.ads_amount
 	var speed_fov := base_fov + clampf((_horizontal_speed() - walk_speed) * 1.2, 0.0, 14.0)
-	var ads_fov := rad_to_deg(2.0 * atan(tan(deg_to_rad(base_fov) * 0.5) / ads_zoom))
+	var ads_fov := rad_to_deg(2.0 * atan(tan(deg_to_rad(base_fov) * 0.5) / weapon.current_zoom()))
 	camera.fov = lerpf(camera.fov, lerpf(speed_fov, ads_fov, ads), 1.0 - exp(-14.0 * delta))
 
 	# The reticle ring tracks the weapon's live angular spread in pixels.
@@ -712,6 +716,17 @@ func add_camera_recoil(pitch: float, yaw: float) -> void:
 func kick_view(pitch: float, yaw: float) -> void:
 	head.rotation.x = clampf(head.rotation.x + pitch, -PITCH_LIMIT, PITCH_LIMIT)
 	rotate_y(yaw)
+
+
+## Restores health (capped at max_health). Returns how much was actually healed.
+func heal(amount: float) -> float:
+	if _dead:
+		return 0.0
+	var before := health
+	health = minf(health + amount, max_health)
+	if health != before:
+		health_changed.emit(health)
+	return health - before
 
 
 func take_damage(amount: float, _hit_pos := Vector3.ZERO, _hit_normal := Vector3.ZERO,

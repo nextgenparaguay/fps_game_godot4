@@ -469,11 +469,16 @@ func _handle_event(event: Dictionary) -> void:
 			var speed := float(data.get("speed", 165.0))
 			_spawn_tracer(muzzle, target, speed)
 			_spawn_world_muzzle_flash(muzzle)
-			_play_3d_sound(GUNSHOT_SOUND, muzzle, -4.0, randf_range(0.96, 1.04), 110.0)
-			_weapon_kick = 1.0
-			_weapon_flash_timer = 0.05
-			if _weapon_flash:
-				_weapon_flash.visible = true
+			if str(data.get("src", "player")) == "enemy":
+				# Enemy gunfire: world tracer/flash/sound only. The first-person
+				# viewmodel recoil and flash belong to the player's own shots.
+				_play_3d_sound(GUNSHOT_SOUND, muzzle, -9.0, randf_range(0.8, 0.92), 110.0)
+			else:
+				_play_3d_sound(GUNSHOT_SOUND, muzzle, -4.0, randf_range(0.96, 1.04), 110.0)
+				_weapon_kick = 1.0
+				_weapon_flash_timer = 0.05
+				if _weapon_flash:
+					_weapon_flash.visible = true
 		"hit":
 			var data: Dictionary = event.get("data", {})
 			var pos := _to_vec(data.get("pos", []))
